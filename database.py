@@ -1,14 +1,21 @@
-import sqlite3
-from datetime import datetime
-import json
 import os
+import json
+from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 
-DATABASE = 'classwrite.db'
+# Get database URL from environment variable (Render sets this automatically)
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/classwrite')
+
+# Create connection pool for better performance
+pool = ThreadedConnectionPool(1, 20, DATABASE_URL)
 
 def get_db():
-    conn = sqlite3.connect(DATABASE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return pool.getconn()
+
+def release_db(conn):
+    pool.putconn(conn)
 
 def init_db():
     conn = get_db()
@@ -17,7 +24,7 @@ def init_db():
     # Create tables
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS assignments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             question TEXT NOT NULL,
             resources TEXT,
@@ -30,19 +37,19 @@ def init_db():
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS submissions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             student_name TEXT NOT NULL,
             assignment_id INTEGER NOT NULL,
             content TEXT,
             status TEXT DEFAULT 'submitted',
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (assignment_id) REFERENCES assignments (id)
+            FOREIGN KEY (assignment_id) REFERENCES assignments (id) ON DELETE CASCADE
         )
     ''')
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS student_work (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             student_name TEXT NOT NULL,
             assignment_id INTEGER NOT NULL,
             content TEXT,
@@ -53,26 +60,29 @@ def init_db():
     ''')
     
     conn.commit()
-    conn.close()
+    cursor.close()
+    release_db(conn)
 
 def save_assignment(title, question, resources, criteria, mindmap, images):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO assignments (title, question, resources, criteria, mindmap, images)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
     ''', (title, question, json.dumps(resources), json.dumps(criteria), mindmap, json.dumps(images)))
+    assignment_id = cursor.fetchone()[0]
     conn.commit()
-    assignment_id = cursor.lastrowid
-    conn.close()
+    cursor.close()
+    release_db(conn)
     return get_assignment(assignment_id)
 
 def get_assignments():
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute('SELECT * FROM assignments ORDER BY created_at DESC')
     rows = cursor.fetchall()
-    conn.close()
+    cursor.close()
+    release_db(conn)
     
     assignments = []
     for row in rows:
@@ -90,10 +100,11 @@ def get_assignments():
 
 def get_assignment(assignment_id):
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM assignments WHERE id = ?', (assignment_id,))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute('SELECT * FROM assignments WHERE id = %s', (assignment_id,))
     row = cursor.fetchone()
-    conn.close()
+    cursor.close()
+    release_db(conn)
     
     if row:
         return {
@@ -111,48 +122,51 @@ def get_assignment(assignment_id):
 def delete_assignment(assignment_id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM assignments WHERE id = ?', (assignment_id,))
-    cursor.execute('DELETE FROM submissions WHERE assignment_id = ?', (assignment_id,))
-    cursor.execute('DELETE FROM student_work WHERE assignment_id = ?', (assignment_id,))
+    cursor.execute('DELETE FROM assignments WHERE id = %s', (assignment_id,))
+    cursor.execute('DELETE FROM submissions WHERE assignment_id = %s', (assignment_id,))
+    cursor.execute('DELETE FROM student_work WHERE assignment_id = %s', (assignment_id,))
     conn.commit()
-    conn.close()
+    cursor.close()
+    release_db(conn)
 
 def save_submission(student_name, assignment_id, content):
     conn = get_db()
     cursor = conn.cursor()
     
     # Check if submission exists
-    cursor.execute('SELECT id FROM submissions WHERE student_name = ? AND assignment_id = ?', 
+    cursor.execute('SELECT id FROM submissions WHERE student_name = %s AND assignment_id = %s', 
                    (student_name, assignment_id))
     existing = cursor.fetchone()
     
     if existing:
         cursor.execute('''
             UPDATE submissions 
-            SET content = ?, submitted_at = CURRENT_TIMESTAMP, status = 'submitted'
-            WHERE student_name = ? AND assignment_id = ?
+            SET content = %s, submitted_at = CURRENT_TIMESTAMP, status = 'submitted'
+            WHERE student_name = %s AND assignment_id = %s
         ''', (content, student_name, assignment_id))
     else:
         cursor.execute('''
             INSERT INTO submissions (student_name, assignment_id, content, status)
-            VALUES (?, ?, ?, 'submitted')
+            VALUES (%s, %s, %s, 'submitted')
         ''', (student_name, assignment_id, content))
     
     conn.commit()
-    conn.close()
+    cursor.close()
+    release_db(conn)
 
 def get_submissions(assignment_id=None):
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     
     if assignment_id:
-        cursor.execute('SELECT * FROM submissions WHERE assignment_id = ? ORDER BY submitted_at DESC', 
+        cursor.execute('SELECT * FROM submissions WHERE assignment_id = %s ORDER BY submitted_at DESC', 
                        (assignment_id,))
     else:
         cursor.execute('SELECT * FROM submissions ORDER BY submitted_at DESC')
     
     rows = cursor.fetchall()
-    conn.close()
+    cursor.close()
+    release_db(conn)
     
     return [dict(row) for row in rows]
 
@@ -162,20 +176,22 @@ def save_student_work(student_name, assignment_id, content):
     
     cursor.execute('''
         INSERT INTO student_work (student_name, assignment_id, content, last_updated, status)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'in_progress')
-        ON CONFLICT(student_name, assignment_id) 
-        DO UPDATE SET content = ?, last_updated = CURRENT_TIMESTAMP, status = 'in_progress'
+        VALUES (%s, %s, %s, CURRENT_TIMESTAMP, 'in_progress')
+        ON CONFLICT (student_name, assignment_id) 
+        DO UPDATE SET content = %s, last_updated = CURRENT_TIMESTAMP, status = 'in_progress'
     ''', (student_name, assignment_id, content, content))
     
     conn.commit()
-    conn.close()
+    cursor.close()
+    release_db(conn)
 
 def get_student_work():
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute('SELECT * FROM student_work ORDER BY last_updated DESC')
     rows = cursor.fetchall()
-    conn.close()
+    cursor.close()
+    release_db(conn)
     
     work_dict = {}
     for row in rows:
@@ -192,10 +208,11 @@ def get_student_work():
 def delete_student_work(student_name, assignment_id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM student_work WHERE student_name = ? AND assignment_id = ?', 
+    cursor.execute('DELETE FROM student_work WHERE student_name = %s AND assignment_id = %s', 
                    (student_name, assignment_id))
     conn.commit()
-    conn.close()
+    cursor.close()
+    release_db(conn)
 
 # Initialize database
 init_db()
