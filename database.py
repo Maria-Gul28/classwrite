@@ -2,7 +2,6 @@ import os
 import json
 from datetime import datetime
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
 
 # Get database URL from environment variable
@@ -91,17 +90,16 @@ def save_assignment(title, question, resources, criteria, mindmap, images):
         conn = get_db()
         cursor = conn.cursor()
         
+        # Convert lists to JSON strings for storage
+        resources_json = json.dumps(resources)
+        criteria_json = json.dumps(criteria)
+        images_json = json.dumps(images)
+        
         cursor.execute('''
             INSERT INTO assignments (title, question, resources, criteria, mindmap, images)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        ''', (
-            title, 
-            question, 
-            json.dumps(resources),
-            json.dumps(criteria),
-            mindmap, 
-            json.dumps(images)
-        ))
+        ''', (title, question, resources_json, criteria_json, mindmap, images_json))
+        
         assignment_id = cursor.fetchone()[0]
         conn.commit()
         
@@ -120,59 +118,6 @@ def save_assignment(title, question, resources, criteria, mindmap, images):
         if conn:
             release_db(conn)
 
-def get_assignments():
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM assignments ORDER BY created_at DESC')
-        rows = cursor.fetchall()
-        
-        assignments_list = []
-        for row in rows:
-            # row is a tuple, need to access by index
-            # PostgreSQL returns JSONB as Python objects already parsed
-            # So we just use them directly
-            resources = row[3]  # resources column
-            if resources is None:
-                resources = []
-            elif isinstance(resources, str):
-                resources = json.loads(resources)
-                
-            criteria = row[4]  # criteria column
-            if criteria is None:
-                criteria = []
-            elif isinstance(criteria, str):
-                criteria = json.loads(criteria)
-                
-            images = row[6]  # images column
-            if images is None:
-                images = []
-            elif isinstance(images, str):
-                images = json.loads(images)
-            
-            assignments_list.append({
-                'id': row[0],
-                'title': row[1],
-                'question': row[2],
-                'resources': resources,
-                'criteria': criteria,
-                'mindmap': row[5] or '',
-                'images': images,
-                'created_at': row[7]
-            })
-        
-        cursor.close()
-        release_db(conn)
-        return assignments_list
-        
-    except Exception as e:
-        print(f"Error getting assignments: {e}")
-        if conn:
-            release_db(conn)
-        raise
-
 def get_assignment(assignment_id):
     conn = None
     cursor = None
@@ -185,23 +130,10 @@ def get_assignment(assignment_id):
         release_db(conn)
         
         if row:
-            resources = row[3]
-            if resources is None:
-                resources = []
-            elif isinstance(resources, str):
-                resources = json.loads(resources)
-                
-            criteria = row[4]
-            if criteria is None:
-                criteria = []
-            elif isinstance(criteria, str):
-                criteria = json.loads(criteria)
-                
-            images = row[6]
-            if images is None:
-                images = []
-            elif isinstance(images, str):
-                images = json.loads(images)
+            # Parse JSON strings back to Python objects
+            resources = json.loads(row[3]) if row[3] else []
+            criteria = json.loads(row[4]) if row[4] else []
+            images = json.loads(row[6]) if row[6] else []
             
             return {
                 'id': row[0],
@@ -217,6 +149,43 @@ def get_assignment(assignment_id):
         
     except Exception as e:
         print(f"Error getting assignment {assignment_id}: {e}")
+        if conn:
+            release_db(conn)
+        raise
+
+def get_assignments():
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM assignments ORDER BY created_at DESC')
+        rows = cursor.fetchall()
+        cursor.close()
+        release_db(conn)
+        
+        assignments_list = []
+        for row in rows:
+            # Parse JSON strings back to Python objects
+            resources = json.loads(row[3]) if row[3] else []
+            criteria = json.loads(row[4]) if row[4] else []
+            images = json.loads(row[6]) if row[6] else []
+            
+            assignments_list.append({
+                'id': row[0],
+                'title': row[1],
+                'question': row[2],
+                'resources': resources,
+                'criteria': criteria,
+                'mindmap': row[5] or '',
+                'images': images,
+                'created_at': row[7]
+            })
+        
+        return assignments_list
+        
+    except Exception as e:
+        print(f"Error getting assignments: {e}")
         if conn:
             release_db(conn)
         raise
