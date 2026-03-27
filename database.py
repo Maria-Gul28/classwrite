@@ -1,7 +1,7 @@
 import os
-import json
 from datetime import datetime
 import psycopg2
+import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 from contextlib import contextmanager
 
@@ -27,6 +27,14 @@ def get_db():
         raise
     finally:
         pool.putconn(conn)
+
+def _dt(val):
+    """Convert datetime to ISO string, or return as-is if already a string/None."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.isoformat()
+    return str(val)
 
 def init_db():
     with get_db() as conn:
@@ -77,19 +85,18 @@ def save_assignment(title, question, resources, criteria, mindmap, images):
     with get_db() as conn:
         cursor = conn.cursor()
         
-        resources_json = json.dumps(resources)
-        criteria_json = json.dumps(criteria)
-        images_json = json.dumps(images)
-        
         cursor.execute('''
             INSERT INTO assignments (title, question, resources, criteria, mindmap, images)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        ''', (title, question, resources_json, criteria_json, mindmap, images_json))
+        ''', (title, question,
+              psycopg2.extras.Json(resources),
+              psycopg2.extras.Json(criteria),
+              mindmap,
+              psycopg2.extras.Json(images)))
         
         assignment_id = cursor.fetchone()[0]
         cursor.close()
     
-    # Connection is fully released before calling get_assignment
     return get_assignment(assignment_id)
 
 def get_assignment(assignment_id):
@@ -100,19 +107,15 @@ def get_assignment(assignment_id):
         cursor.close()
         
         if row:
-            resources = json.loads(row[3]) if row[3] else []
-            criteria = json.loads(row[4]) if row[4] else []
-            images = json.loads(row[6]) if row[6] else []
-            
             return {
                 'id': row[0],
                 'title': row[1],
                 'question': row[2],
-                'resources': resources,
-                'criteria': criteria,
+                'resources': row[3] if row[3] is not None else [],
+                'criteria': row[4] if row[4] is not None else [],
                 'mindmap': row[5] or '',
-                'images': images,
-                'created_at': row[7]
+                'images': row[6] if row[6] is not None else [],
+                'created_at': _dt(row[7])
             }
         return None
 
@@ -125,19 +128,15 @@ def get_assignments():
         
         assignments_list = []
         for row in rows:
-            resources = json.loads(row[3]) if row[3] else []
-            criteria = json.loads(row[4]) if row[4] else []
-            images = json.loads(row[6]) if row[6] else []
-            
             assignments_list.append({
                 'id': row[0],
                 'title': row[1],
                 'question': row[2],
-                'resources': resources,
-                'criteria': criteria,
+                'resources': row[3] if row[3] is not None else [],
+                'criteria': row[4] if row[4] is not None else [],
                 'mindmap': row[5] or '',
-                'images': images,
-                'created_at': row[7]
+                'images': row[6] if row[6] is not None else [],
+                'created_at': _dt(row[7])
             })
         
         return assignments_list
@@ -191,7 +190,7 @@ def get_submissions(assignment_id=None):
                 'assignment_id': row[2],
                 'content': row[3] or '',
                 'status': row[4],
-                'submitted_at': row[5]
+                'submitted_at': _dt(row[5])
             })
         return submissions_list
 
@@ -222,7 +221,7 @@ def get_student_work():
                 'student_name': row[1],
                 'assignment_id': row[2],
                 'content': row[3] or '',
-                'last_updated': row[4],
+                'last_updated': _dt(row[4]),
                 'status': row[5]
             }
         return work_dict
