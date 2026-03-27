@@ -143,13 +143,50 @@
 
         .work-item { background: #fefaf5; border-left: 4px solid #c47a3a; padding: 16px 20px; border-radius: 14px; margin-bottom: 12px; }
 
+        /* Live progress — student tabs */
+        .student-tabs-bar {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px;
+        }
+        .student-tab {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 18px; border-radius: 40px;
+            border: 1.5px solid #e0d4c4; background: white;
+            cursor: pointer; font-family: 'DM Sans', sans-serif;
+            font-size: 0.88rem; font-weight: 500; color: #4a3f35;
+            transition: all 0.2s; position: relative;
+        }
+        .student-tab:hover { border-color: #c47a3a; background: #fefaf5; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
+        .student-tab.active { background: #1a1510; color: white; border-color: #1a1510; }
+        .student-tab .tab-dot { width: 8px; height: 8px; border-radius: 50%; background: #5c7a6a; flex-shrink: 0; animation: livePulse 1.5s infinite; }
+        .student-tab.active .tab-dot { background: #c47a3a; }
+        .student-tab .tab-words { font-size: 0.72rem; opacity: 0.7; }
+
         /* Live progress card */
         .progress-card { background: white; border: 1px solid #e0d4c4; border-radius: 20px; padding: 20px 24px; margin-bottom: 16px; transition: 0.2s; }
         .progress-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
         .progress-student { font-weight: 600; font-size: 1rem; }
         .progress-time { font-size: 0.75rem; color: #8a7a6e; }
-        .progress-preview { font-family: 'Lora', serif; font-size: 0.9rem; color: #4a3f35; line-height: 1.6; background: #fefaf5; padding: 12px 16px; border-radius: 12px; }
+        .progress-preview {
+            font-family: 'Lora', serif; font-size: 0.9rem; color: #4a3f35;
+            line-height: 1.75; background: #fefaf5; padding: 16px 20px;
+            border-radius: 12px; white-space: pre-wrap; word-break: break-word;
+        }
         .progress-chars { font-size: 0.75rem; color: #8a7a6e; margin-top: 8px; }
+
+        /* Image upload area */
+        .image-upload-area {
+            border: 2px dashed #e0d4c4; border-radius: 16px; padding: 20px;
+            text-align: center; cursor: pointer; transition: 0.2s; background: #fefaf5;
+            margin-bottom: 12px;
+        }
+        .image-upload-area:hover { border-color: #c47a3a; background: white; }
+        .image-upload-area.drag-over { border-color: #c47a3a; background: #fdf5ec; }
+        .image-thumb-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .image-thumb { position: relative; width: 90px; height: 90px; border-radius: 12px; overflow: hidden; border: 1.5px solid #e0d4c4; }
+        .image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .image-thumb-remove { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(26,21,16,0.7); color: white; border: none; cursor: pointer; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; }
+        .resource-image-display { border-radius: 14px; max-width: 100%; margin-bottom: 12px; border: 1px solid #e0d4c4; }
+        .resource-images-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
 
         .writing-area { width: 100%; min-height: 380px; padding: 20px; font-family: 'Lora', serif; font-size: 1rem; line-height: 1.7; border: 1.5px solid #e0d4c4; border-radius: 20px; resize: vertical; background: white; }
 
@@ -301,12 +338,27 @@ socket.on('connect_error', () => {
 socket.on('progress_update', (data) => {
     const key = `${data.student_name}_${data.assignment_id}`;
     studentWorks[key] = data;
-    // If teacher is currently on Live Progress page, refresh it
     const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
     if (currentRole === 'teacher' && activeSidebarBtn && activeSidebarBtn.dataset.page === 'progress') {
-        renderLiveProgress();
+        if (activeProgressTab === key) {
+            const previewEl = document.getElementById('progressPreviewText');
+            const card = document.getElementById('activeStudentCard');
+            if (previewEl) {
+                const fullContent = data.content || '';
+                previewEl.textContent = fullContent;
+                const charCount = fullContent.length;
+                const wordCount = fullContent.trim().split(/\s+/).filter(Boolean).length;
+                const charsEl = card ? card.querySelector('.progress-chars') : null;
+                if (charsEl) charsEl.textContent = `${wordCount} word${wordCount===1?'':'s'} · ${charCount} characters`;
+                const timeEl = card ? card.querySelector('.progress-time') : null;
+                if (timeEl) timeEl.textContent = `Last update: ${new Date(data.last_updated||Date.now()).toLocaleTimeString()}`;
+            } else {
+                renderLiveProgress();
+            }
+        } else {
+            renderLiveProgress();
+        }
     }
-    // Always update overview stats
 });
 
 // Teacher receives this when a student submits
@@ -484,6 +536,16 @@ function renderCreateAssignment() {
                     <div style="display:flex;gap:8px"><input class="form-input" id="resInput" placeholder="https://…"><button class="btn btn-ghost" id="addResBtn">+ Add</button></div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Resource Images</label>
+                    <div class="image-upload-area" id="imageDropZone">
+                        <div style="font-size:2rem;margin-bottom:8px">🖼️</div>
+                        <div style="font-weight:600;font-size:0.9rem;color:#4a3f35">Drop images here or click to upload</div>
+                        <div style="font-size:0.75rem;color:#8a7a6e;margin-top:4px">PNG, JPG, GIF, WebP — up to 5 images</div>
+                        <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none">
+                    </div>
+                    <div class="image-thumb-grid" id="imageThumbGrid"></div>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Success Criteria</label>
                     <div id="critList" class="tag-list"></div>
                     <div style="display:flex;gap:8px"><input class="form-input" id="critInput" placeholder="e.g. Clear thesis, vocabulary…"><button class="btn btn-ghost" id="addCritBtn">+ Add</button></div>
@@ -508,6 +570,48 @@ function renderCreateAssignment() {
         if(e.target.classList.contains('tag-remove') && e.target.dataset.t==='crit') { criteriaArr.splice(+e.target.dataset.i,1); updateCritUI(); }
     });
 
+    // --- Image Upload Logic ---
+    let imagesArr = []; // stores base64 data URLs
+
+    function renderImageThumbs() {
+        const grid = document.getElementById('imageThumbGrid');
+        if (!grid) return;
+        grid.innerHTML = imagesArr.map((src, i) => `
+            <div class="image-thumb">
+                <img src="${src}" alt="Resource image ${i+1}">
+                <button class="image-thumb-remove" data-i="${i}" title="Remove">✕</button>
+            </div>`).join('');
+        grid.querySelectorAll('.image-thumb-remove').forEach(btn => {
+            btn.addEventListener('click', () => { imagesArr.splice(+btn.dataset.i, 1); renderImageThumbs(); });
+        });
+    }
+
+    function processImageFiles(files) {
+        const remaining = 5 - imagesArr.length;
+        const toProcess = Array.from(files).slice(0, remaining);
+        if (toProcess.length === 0) { showToast('Maximum 5 images allowed'); return; }
+        toProcess.forEach(file => {
+            if (!file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = e => { imagesArr.push(e.target.result); renderImageThumbs(); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    const dropZone = document.getElementById('imageDropZone');
+    const fileInput = document.getElementById('imageFileInput');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => processImageFiles(e.target.files));
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        processImageFiles(e.dataTransfer.files);
+    });
+
     document.getElementById('publishAssignmentBtn').onclick = async () => {
         const title    = document.getElementById('newTitle').value.trim();
         const question = document.getElementById('newQuestion').value.trim();
@@ -520,7 +624,7 @@ function renderCreateAssignment() {
 
         const result = await apiFetch('/api/assignments', {
             method: 'POST',
-            body: JSON.stringify({ title, question, resources: resourcesArr, criteria: criteriaArr, mindmap, images: [] })
+            body: JSON.stringify({ title, question, resources: resourcesArr, criteria: criteriaArr, mindmap, images: imagesArr })
         });
 
         if (result) {
@@ -574,10 +678,15 @@ function renderTeacherAssignments() {
     });
 }
 
-function renderLiveProgress() {
+// Track which student tab is active in live progress
+let activeProgressTab = null;
+
+function renderLiveProgress(forceTab) {
     const content = document.getElementById('mainContent');
     const activeList = Object.values(studentWorks);
+
     if (activeList.length === 0) {
+        activeProgressTab = null;
         content.innerHTML = `
             <div class="page active">
                 <div class="page-title"><span class="live-dot"></span>Live Progress</div>
@@ -586,30 +695,57 @@ function renderLiveProgress() {
             </div>`;
         return;
     }
+
+    // Pick default tab if none selected or previous tab left
+    if (forceTab) {
+        activeProgressTab = forceTab;
+    } else if (!activeProgressTab || !studentWorks[activeProgressTab]) {
+        activeProgressTab = Object.keys(studentWorks)[0];
+    }
+
+    const w = studentWorks[activeProgressTab];
+    const assignTitle = assignments.find(a => a.id === w.assignment_id)?.title || `Assignment #${w.assignment_id}`;
+    const fullContent = (w.content || '');
+    const charCount = fullContent.length;
+    const wordCount = fullContent.trim().split(/\s+/).filter(Boolean).length;
+    const updated = w.last_updated ? new Date(w.last_updated).toLocaleTimeString() : '';
+
+    const tabsHtml = activeList.map(sw => {
+        const key = `${sw.student_name}_${sw.assignment_id}`;
+        const wc = (sw.content || '').trim().split(/\s+/).filter(Boolean).length;
+        const isActive = key === activeProgressTab;
+        return `<button class="student-tab ${isActive ? 'active' : ''}" data-key="${key}">
+            <span class="tab-dot"></span>
+            <span>${sw.student_name}</span>
+            <span class="tab-words">${wc}w</span>
+        </button>`;
+    }).join('');
+
     content.innerHTML = `
         <div class="page active">
             <div class="page-title"><span class="live-dot"></span>Live Progress</div>
-            <div class="page-subtitle">${activeList.length} student${activeList.length===1?'':'s'} writing now</div>
-            ${activeList.map(w => {
-                const assignTitle = assignments.find(a=>a.id===w.assignment_id)?.title || `Assignment #${w.assignment_id}`;
-                const preview = (w.content||'').substring(0,200);
-                const charCount = (w.content||'').length;
-                const wordCount = (w.content||'').trim().split(/\s+/).filter(Boolean).length;
-                const updated = w.last_updated ? new Date(w.last_updated).toLocaleTimeString() : '';
-                return `
-                    <div class="progress-card">
-                        <div class="progress-card-header">
-                            <div>
-                                <div class="progress-student">✍️ ${w.student_name}</div>
-                                <div style="font-size:0.78rem;color:#8a7a6e;margin-top:2px">${assignTitle}</div>
-                            </div>
-                            <div class="progress-time">Last update: ${updated}</div>
-                        </div>
-                        <div class="progress-preview">${preview.replace(/</g,'&lt;')}${charCount>200?'…':''}</div>
-                        <div class="progress-chars">${wordCount} word${wordCount===1?'':'s'} · ${charCount} characters</div>
-                    </div>`;
-            }).join('')}
+            <div class="page-subtitle">${activeList.length} student${activeList.length===1?'':'s'} writing now — click a name to view their work</div>
+            <div class="student-tabs-bar">${tabsHtml}</div>
+            <div class="progress-card" id="activeStudentCard">
+                <div class="progress-card-header">
+                    <div>
+                        <div class="progress-student">✍️ ${w.student_name}</div>
+                        <div style="font-size:0.78rem;color:#8a7a6e;margin-top:2px">${assignTitle}</div>
+                    </div>
+                    <div class="progress-time">Last update: ${updated}</div>
+                </div>
+                <div class="progress-preview" id="progressPreviewText">${fullContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                <div class="progress-chars">${wordCount} word${wordCount===1?'':'s'} · ${charCount} characters</div>
+            </div>
         </div>`;
+
+    // Tab click handlers
+    content.querySelectorAll('.student-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            activeProgressTab = tab.dataset.key;
+            renderLiveProgress();
+        });
+    });
 }
 
 function renderSubmissions() {
@@ -687,6 +823,7 @@ function openAssignment(id) {
             </div>
             ${assignment.criteria?.length ? `<div class="card"><div class="card-title">✅ Success Criteria</div>${assignment.criteria.map(c=>`<div style="margin-bottom:6px">◆ ${c}</div>`).join('')}</div>` : ''}
             ${assignment.resources?.length ? `<div class="card"><div class="card-title">🔗 Resources</div>${assignment.resources.map(r=>`<a href="${r.startsWith('http')?r:'#'}" target="_blank" class="tag" style="margin-bottom:6px">🔗 ${r}</a>`).join(' ')}</div>` : ''}
+            ${assignment.images?.length ? `<div class="card"><div class="card-title">🖼️ Resource Images</div><div class="resource-images-row">${assignment.images.map((src,i)=>`<img src="${src}" alt="Resource ${i+1}" class="resource-image-display" style="max-height:220px;object-fit:contain;">`).join('')}</div></div>` : ''}
             <div class="card">
                 <div class="card-title">✍️ Your Writing</div>
                 <textarea id="studentWritingArea" class="writing-area" rows="14" placeholder="Start writing here…">${savedContent.replace(/</g,'&lt;')}</textarea>
