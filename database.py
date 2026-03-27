@@ -66,16 +66,22 @@ def init_db():
 def save_assignment(title, question, resources, criteria, mindmap, images):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO assignments (title, question, resources, criteria, mindmap, images)
-        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-    ''', (title, question, json.dumps(resources), json.dumps(criteria), mindmap, json.dumps(images)))
-    assignment_id = cursor.fetchone()[0]
-    conn.commit()
-    cursor.close()
-    release_db(conn)
-    return get_assignment(assignment_id)
-
+    try:
+        cursor.execute('''
+            INSERT INTO assignments (title, question, resources, criteria, mindmap, images)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+        ''', (title, question, json.dumps(resources), json.dumps(criteria), mindmap, json.dumps(images)))
+        assignment_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        release_db(conn)
+        return get_assignment(assignment_id)
+    except Exception as e:
+        print(f"Error saving assignment: {e}")
+        conn.rollback()
+        cursor.close()
+        release_db(conn)
+        raise
 def get_assignments():
     conn = get_db()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
