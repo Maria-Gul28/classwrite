@@ -368,6 +368,27 @@ let assignments = [];
 let submissions = [];
 let studentWorks = {}; // { "StudentName_assignmentId": { ... } }
 
+// ---- Session persistence helpers ----
+function saveSession() {
+    if (currentRole === 'teacher') {
+        sessionStorage.setItem('cw_role', 'teacher');
+        sessionStorage.removeItem('cw_student');
+        sessionStorage.removeItem('cw_pin');
+    } else if (currentRole === 'student') {
+        sessionStorage.setItem('cw_role', 'student');
+        sessionStorage.setItem('cw_student', currentStudent);
+        sessionStorage.setItem('cw_pin', currentStudentPin);
+    }
+    if (currentAssignmentId !== null) {
+        sessionStorage.setItem('cw_assignment', currentAssignmentId);
+    } else {
+        sessionStorage.removeItem('cw_assignment');
+    }
+}
+function clearSession() {
+    ['cw_role','cw_student','cw_pin','cw_assignment'].forEach(k => sessionStorage.removeItem(k));
+}
+
 // ============================================================
 //  SOCKET.IO  — real-time connection to Flask backend
 // ============================================================
@@ -518,7 +539,8 @@ function renderApp() {
             <div>
                 <div class="sidebar-section-label">CLASSROOM</div>
                 <button class="sidebar-btn active" data-page="studentAssignments">📚 Assignments</button>
-                <button class="sidebar-btn" data-page="myWork">📝 My Work</button>
+                <button class="sidebar-btn" data-page="drafts">📝 Drafts</button>
+                <button class="sidebar-btn" data-page="myWork">✅ My Work</button>
             </div>
         `;
         renderStudentAssignments();
@@ -537,6 +559,7 @@ function renderApp() {
                 else if (page === 'submissions') renderSubmissions();
             } else {
                 if (page === 'studentAssignments') renderStudentAssignments();
+                else if (page === 'drafts') renderDrafts();
                 else if (page === 'myWork') renderMyWork();
             }
         });
@@ -837,6 +860,7 @@ function renderStudentAssignments() {
             <div class="page-title">📖 Assignments</div>
             ${assignments.map(a => {
                 const submitted = submissions.some(s => s.student_name===currentStudent && s.assignment_id===a.id);
+                const hasDraft  = !submitted && !!studentWorks[`${currentStudent}_${a.id}`];
                 return `
                     <div class="assignment-card" data-id="${a.id}">
                         <div class="assignment-card-title">${a.title}</div>
@@ -844,7 +868,9 @@ function renderStudentAssignments() {
                         <div class="assignment-card-meta">
                             ${submitted
                                 ? '<span class="badge" style="background:#d6ebe1;color:#3e5a4c">✓ Submitted</span>'
-                                : '<span class="badge">✨ Click to write</span>'}
+                                : hasDraft
+                                    ? '<span class="badge" style="background:#fdf5ec;color:#c47a3a">📝 Draft in progress</span>'
+                                    : '<span class="badge">✨ Click to write</span>'}
                         </div>
                     </div>`;
             }).join('')}
@@ -858,6 +884,7 @@ function openAssignment(id) {
     const assignment = assignments.find(a => a.id === id);
     if (!assignment) return;
     currentAssignmentId = id;
+    saveSession(); // persist open assignment
 
     // Notify server that student joined
     socket.emit('join_assignment', { student_name: currentStudent, assignment_id: id });
@@ -1002,7 +1029,67 @@ function openAssignment(id) {
         }
     };
 
-    document.getElementById('backToAssignments').onclick = () => renderStudentAssignments();
+    document.getElementById('backToAssignments').onclick = () => {
+        currentAssignmentId = null;
+        saveSession();
+        renderStudentAssignments();
+    };
+}
+
+function renderDrafts() {
+    const content = document.getElementById('mainContent');
+    // Filter drafts for this student that haven't been submitted
+    const myDrafts = Object.values(studentWorks).filter(w =>
+        w.student_name === currentStudent && w.status === 'in_progress'
+    );
+
+    if (myDrafts.length === 0) {
+        content.innerHTML = `
+            <div class="page active">
+                <div class="page-title">📝 Drafts</div>
+                <div class="card">
+                    <div class="empty-state">
+                        <span class="empty-state-icon">✏️</span>
+                        No drafts yet. Start an assignment to see your work in progress here.
+                    </div>
+                </div>
+            </div>`;
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="page active">
+            <div class="page-title">📝 Drafts</div>
+            <div class="page-subtitle">${myDrafts.length} in-progress assignment${myDrafts.length===1?'':'s'}</div>
+            ${myDrafts.map(w => {
+                const assignTitle = assignments.find(a => a.id === w.assignment_id)?.title || `Assignment #${w.assignment_id}`;
+                const wc = (w.content || '').trim().split(/\s+/).filter(Boolean).length;
+                const preview = (w.content || '').substring(0, 200);
+                const updated = w.last_updated ? new Date(w.last_updated).toLocaleString() : '';
+                return `
+                    <div class="work-item" style="cursor:pointer;transition:0.2s;border-left-color:#c47a3a" data-aid="${w.assignment_id}">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                            <div>
+                                <strong style="font-size:1rem">${assignTitle}</strong>
+                                <span class="badge" style="margin-left:10px;background:#fdf5ec;color:#c47a3a">Draft · ${wc} word${wc===1?'':'s'}</span>
+                            </div>
+                            <button class="btn btn-primary draft-continue-btn" data-aid="${w.assignment_id}" style="flex-shrink:0;font-size:0.8rem">Continue →</button>
+                        </div>
+                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.88rem;margin-top:10px;line-height:1.65;color:#4a3f35">${preview.replace(/</g,'&lt;')}${w.content?.length>200?'…':''}</div>
+                        <div class="autosave-indicator" style="margin-top:8px">Last saved: ${updated}</div>
+                    </div>`;
+            }).join('')}
+        </div>`;
+
+    content.querySelectorAll('.draft-continue-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAssignment(parseInt(btn.dataset.aid));
+        });
+    });
+    content.querySelectorAll('.work-item[data-aid]').forEach(item => {
+        item.addEventListener('click', () => openAssignment(parseInt(item.dataset.aid)));
+    });
 }
 
 function renderMyWork() {
@@ -1030,7 +1117,7 @@ function renderMyWork() {
 // ============================================================
 //  ROLE FLOW
 // ============================================================
-async function enterAs(role) {
+async function enterAs(role, opts = {}) {
     showBanner('⏳ Loading classroom data…', false);
 
     if (role === 'teacher') currentRole = 'teacher';
@@ -1048,7 +1135,15 @@ async function enterAs(role) {
         document.getElementById('userBadge').innerHTML = `✍️ ${currentStudent}`;
     }
 
+    saveSession();
     renderApp();
+
+    // Restore student's open assignment after refresh
+    if (role === 'student' && opts.restoreAssignmentId) {
+        const aid = parseInt(opts.restoreAssignmentId);
+        const found = assignments.find(a => a.id === aid);
+        if (found) openAssignment(aid);
+    }
 }
 
 // ============================================================
@@ -1096,9 +1191,36 @@ document.getElementById('studentPin').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('confirmStudentBtn').click();
 });
 
+// ============================================================
+//  AUTO-RESTORE SESSION ON REFRESH
+// ============================================================
+(async () => {
+    const savedRole = sessionStorage.getItem('cw_role');
+    if (!savedRole) return; // fresh visit, show entry screen
+
+    const savedAssignment = sessionStorage.getItem('cw_assignment');
+
+    if (savedRole === 'teacher') {
+        currentRole = 'teacher';
+        await enterAs('teacher');
+        showToast('Welcome back, Teacher! 🎓');
+    } else if (savedRole === 'student') {
+        const savedName = sessionStorage.getItem('cw_student');
+        const savedPin  = sessionStorage.getItem('cw_pin');
+        if (savedName && savedPin) {
+            currentStudent    = savedName;
+            currentStudentPin = savedPin;
+            await enterAs('student', { restoreAssignmentId: savedAssignment });
+            showToast(`Welcome back, ${savedName}! ✍️`);
+        }
+    }
+})();
+
+
 document.getElementById('signOutBtn').onclick = () => {
-    currentRole = null; currentStudent = null; currentStudentPin = null;
+    currentRole = null; currentStudent = null; currentStudentPin = null; currentAssignmentId = null;
     assignments = []; submissions = []; studentWorks = {};
+    clearSession();
     document.getElementById('appShell').style.display = 'none';
     document.getElementById('entryScreen').style.display = 'flex';
     showToast('Signed out');
