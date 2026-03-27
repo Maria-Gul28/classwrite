@@ -1,11 +1,12 @@
 import sqlite3
 from datetime import datetime
 import json
+import os
 
 DATABASE = 'classwrite.db'
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(DATABASE, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 

@@ -11,10 +11,18 @@ import database
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
+
+# Try to use eventlet, fall back to threading if not available
+try:
+    import eventlet
+    async_mode = 'eventlet'
+except ImportError:
+    async_mode = 'threading'
+
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='eventlet',
+    async_mode=async_mode,
     logger=True,
     engineio_logger=True
 )
