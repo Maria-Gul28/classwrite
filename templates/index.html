@@ -185,8 +185,61 @@
         .image-thumb { position: relative; width: 90px; height: 90px; border-radius: 12px; overflow: hidden; border: 1.5px solid #e0d4c4; }
         .image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .image-thumb-remove { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(26,21,16,0.7); color: white; border: none; cursor: pointer; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; }
-        .resource-image-display { border-radius: 14px; max-width: 100%; margin-bottom: 12px; border: 1px solid #e0d4c4; }
-        .resource-images-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+        /* Image Slideshow */
+        .slideshow-wrap {
+            position: relative; border-radius: 18px; overflow: hidden;
+            background: #1a1510; border: 1px solid #e0d4c4;
+            user-select: none;
+        }
+        .slideshow-track {
+            display: flex; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: transform;
+        }
+        .slide {
+            flex: 0 0 100%; display: flex; align-items: center;
+            justify-content: center; min-height: 260px; max-height: 420px;
+        }
+        .slide img {
+            max-width: 100%; max-height: 420px; object-fit: contain;
+            display: block; border-radius: 0;
+        }
+        .slide-arrow {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            width: 40px; height: 40px; border-radius: 50%;
+            background: rgba(255,255,255,0.92); border: 1.5px solid #e0d4c4;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 1rem; color: #1a1510; z-index: 10;
+            transition: all 0.18s; box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+        }
+        .slide-arrow:hover { background: white; transform: translateY(-50%) scale(1.1); box-shadow: 0 6px 18px rgba(0,0,0,0.22); }
+        .slide-arrow:active { transform: translateY(-50%) scale(0.96); }
+        .slide-arrow.prev { left: 12px; }
+        .slide-arrow.next { right: 12px; }
+        .slide-arrow.disabled { opacity: 0.25; pointer-events: none; }
+        .slide-dots {
+            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 6px; align-items: center;
+        }
+        .slide-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: rgba(255,255,255,0.45); cursor: pointer;
+            transition: all 0.2s; border: none; padding: 0;
+        }
+        .slide-dot.active { background: white; transform: scale(1.25); }
+        .slide-counter {
+            position: absolute; top: 12px; right: 14px;
+            background: rgba(26,21,16,0.55); color: white; backdrop-filter: blur(4px);
+            padding: 4px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+        .resource-link-item {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #f0e8dc; padding: 7px 14px; border-radius: 30px;
+            font-size: 0.82rem; color: #4a3f35; text-decoration: none;
+            border: 1px solid #e0d4c4; transition: all 0.18s; margin: 4px 4px 4px 0;
+            font-weight: 500;
+        }
+        .resource-link-item:hover { background: white; border-color: #c47a3a; color: #c47a3a; transform: translateY(-1px); }
 
         .writing-area { width: 100%; min-height: 380px; padding: 20px; font-family: 'Lora', serif; font-size: 1rem; line-height: 1.7; border: 1.5px solid #e0d4c4; border-radius: 20px; resize: vertical; background: white; }
 
@@ -813,17 +866,47 @@ function openAssignment(id) {
     const serverWork = studentWorks[`${currentStudent}_${id}`];
     const savedContent = serverWork?.content || '';
 
+    // Build slideshow HTML if images exist
+    const images = assignment.images || [];
+    const slideshowHtml = images.length > 0 ? `
+        <div class="card">
+            <div class="card-title">🖼️ Resource Images <span style="font-size:0.78rem;color:#8a7a6e;font-family:'DM Sans',sans-serif;font-weight:400">${images.length} image${images.length===1?'':'s'}</span></div>
+            <div class="slideshow-wrap" id="slideshowWrap">
+                <div class="slideshow-track" id="slideshowTrack">
+                    ${images.map((src,i)=>`<div class="slide"><img src="${src}" alt="Resource image ${i+1}" draggable="false"></div>`).join('')}
+                </div>
+                ${images.length > 1 ? `
+                    <button class="slide-arrow prev disabled" id="slidePrev">&#8249;</button>
+                    <button class="slide-arrow next" id="slideNext">&#8250;</button>
+                    <div class="slide-dots" id="slideDots">
+                        ${images.map((_,i)=>`<button class="slide-dot${i===0?' active':''}" data-idx="${i}"></button>`).join('')}
+                    </div>
+                    <div class="slide-counter" id="slideCounter">1 / ${images.length}</div>
+                ` : ''}
+            </div>
+        </div>` : '';
+
     const contentDiv = document.getElementById('mainContent');
     contentDiv.innerHTML = `
         <div class="page active">
             <button class="btn btn-ghost" id="backToAssignments" style="margin-bottom:20px">← Back</button>
             <div class="card">
                 <div class="card-title">${assignment.title}</div>
-                <div style="white-space:pre-wrap;line-height:1.7">${assignment.question}</div>
+                <div style="white-space:pre-wrap;line-height:1.7;color:#4a3f35">${assignment.question.replace(/</g,'&lt;')}</div>
             </div>
-            ${assignment.criteria?.length ? `<div class="card"><div class="card-title">✅ Success Criteria</div>${assignment.criteria.map(c=>`<div style="margin-bottom:6px">◆ ${c}</div>`).join('')}</div>` : ''}
-            ${assignment.resources?.length ? `<div class="card"><div class="card-title">🔗 Resources</div>${assignment.resources.map(r=>`<a href="${r.startsWith('http')?r:'#'}" target="_blank" class="tag" style="margin-bottom:6px">🔗 ${r}</a>`).join(' ')}</div>` : ''}
-            ${assignment.images?.length ? `<div class="card"><div class="card-title">🖼️ Resource Images</div><div class="resource-images-row">${assignment.images.map((src,i)=>`<img src="${src}" alt="Resource ${i+1}" class="resource-image-display" style="max-height:220px;object-fit:contain;">`).join('')}</div></div>` : ''}
+            ${assignment.criteria?.length ? `
+                <div class="card">
+                    <div class="card-title">✅ Success Criteria</div>
+                    ${assignment.criteria.map(c=>`<div style="margin-bottom:8px;display:flex;align-items:flex-start;gap:8px"><span style="color:#c47a3a;font-size:0.85rem;margin-top:2px">◆</span><span style="font-size:0.92rem;line-height:1.5">${c.replace(/</g,'&lt;')}</span></div>`).join('')}
+                </div>` : ''}
+            ${assignment.resources?.length ? `
+                <div class="card">
+                    <div class="card-title">🔗 Resources</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px">
+                        ${assignment.resources.map(r=>`<a href="${r.startsWith('http')?r.replace(/"/g,'&quot;'):'#'}" target="_blank" rel="noopener" class="resource-link-item">🔗 ${r.replace(/</g,'&lt;')}</a>`).join('')}
+                    </div>
+                </div>` : ''}
+            ${slideshowHtml}
             <div class="card">
                 <div class="card-title">✍️ Your Writing</div>
                 <textarea id="studentWritingArea" class="writing-area" rows="14" placeholder="Start writing here…">${savedContent.replace(/</g,'&lt;')}</textarea>
@@ -837,6 +920,38 @@ function openAssignment(id) {
             </div>
         </div>
     `;
+
+    // --- Slideshow logic ---
+    if (images.length > 1) {
+        let currentSlide = 0;
+        const track    = document.getElementById('slideshowTrack');
+        const prevBtn  = document.getElementById('slidePrev');
+        const nextBtn  = document.getElementById('slideNext');
+        const counter  = document.getElementById('slideCounter');
+        const dots     = document.querySelectorAll('#slideDots .slide-dot');
+
+        function goToSlide(idx) {
+            currentSlide = idx;
+            track.style.transform = `translateX(-${currentSlide * 100}%)`;
+            counter.textContent = `${currentSlide + 1} / ${images.length}`;
+            dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+            prevBtn.classList.toggle('disabled', currentSlide === 0);
+            nextBtn.classList.toggle('disabled', currentSlide === images.length - 1);
+        }
+
+        prevBtn.addEventListener('click', () => { if (currentSlide > 0) goToSlide(currentSlide - 1); });
+        nextBtn.addEventListener('click', () => { if (currentSlide < images.length - 1) goToSlide(currentSlide + 1); });
+        dots.forEach(dot => dot.addEventListener('click', () => goToSlide(+dot.dataset.idx)));
+
+        // Swipe support
+        let touchStartX = 0;
+        const wrap = document.getElementById('slideshowWrap');
+        wrap.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+        wrap.addEventListener('touchend', e => {
+            const diff = touchStartX - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 40) { diff > 0 ? nextBtn.click() : prevBtn.click(); }
+        });
+    }
 
     const textarea = document.getElementById('studentWritingArea');
 
