@@ -27,6 +27,7 @@ socketio = SocketIO(
     engineio_logger=True
 )
 
+# Rest of your code...
 # Routes
 @app.route('/')
 def index():
