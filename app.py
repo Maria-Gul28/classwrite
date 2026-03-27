@@ -1,3 +1,6 @@
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import sys
 print("Python version:", sys.version)
@@ -12,10 +15,10 @@ import database
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 
-# Try to use gevent, fall back to threading if not available
+# Try to use eventlet, fall back to threading if not available
 try:
-    import gevent
-    async_mode = 'gevent'
+    import eventlet
+    async_mode = 'eventlet'
 except ImportError:
     async_mode = 'threading'
 
