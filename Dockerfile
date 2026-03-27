@@ -1,26 +1,18 @@
-# Use Python 3.11
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
 
-WORKDIR /app
+ARG PYTHON_VERSION=3.12.13
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:${PYTHON_VERSION}-slim
 
-# Copy requirements and install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+LABEL fly_launch_runtime="flask"
 
-# Copy the rest of the application
+WORKDIR /code
+
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
+
 COPY . .
-
-# Set environment
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8080
 
 EXPOSE 8080
 
-# Run with gunicorn
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "-b", "0.0.0.0:8080", "app:app"]
+CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=8080"]
