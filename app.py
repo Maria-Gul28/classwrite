@@ -11,6 +11,7 @@ import database
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB max upload
 
 # Try to use eventlet, fall back to threading if not available
 try:
