@@ -8,7 +8,7 @@ from psycopg2.pool import ThreadedConnectionPool
 # Get database URL from environment variable
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/classwrite')
 
-# Create connection pool with proper configuration
+# Create connection pool
 pool = ThreadedConnectionPool(
     minconn=1,
     maxconn=10,
@@ -16,11 +16,8 @@ pool = ThreadedConnectionPool(
 )
 
 def get_db():
-    """Get a connection from the pool with RealDictCursor"""
-    conn = pool.getconn()
-    # Set cursor_factory at connection level
-    conn.cursor_factory = RealDictCursor
-    return conn
+    """Get a connection from the pool"""
+    return pool.getconn()
 
 def release_db(conn):
     """Release a connection back to the pool"""
@@ -34,7 +31,7 @@ def init_db():
         conn = get_db()
         cursor = conn.cursor()
         
-        # Create tables with JSONB columns for PostgreSQL
+        # Create tables
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS assignments (
                 id SERIAL PRIMARY KEY,
@@ -100,10 +97,10 @@ def save_assignment(title, question, resources, criteria, mindmap, images):
         ''', (
             title, 
             question, 
-            json.dumps(resources),  # Convert to JSON string for JSONB
-            json.dumps(criteria),    # Convert to JSON string for JSONB
+            json.dumps(resources),
+            json.dumps(criteria),
             mindmap, 
-            json.dumps(images)       # Convert to JSON string for JSONB
+            json.dumps(images)
         ))
         assignment_id = cursor.fetchone()[0]
         conn.commit()
@@ -134,35 +131,36 @@ def get_assignments():
         
         assignments_list = []
         for row in rows:
-            # With RealDictCursor, row is a dictionary
-            # JSONB fields come back as Python lists/dicts already, not strings
-            resources = row['resources']
+            # row is a tuple, need to access by index
+            # PostgreSQL returns JSONB as Python objects already parsed
+            # So we just use them directly
+            resources = row[3]  # resources column
             if resources is None:
                 resources = []
             elif isinstance(resources, str):
                 resources = json.loads(resources)
                 
-            criteria = row['criteria']
+            criteria = row[4]  # criteria column
             if criteria is None:
                 criteria = []
             elif isinstance(criteria, str):
                 criteria = json.loads(criteria)
                 
-            images = row['images']
+            images = row[6]  # images column
             if images is None:
                 images = []
             elif isinstance(images, str):
                 images = json.loads(images)
             
             assignments_list.append({
-                'id': row['id'],
-                'title': row['title'],
-                'question': row['question'],
+                'id': row[0],
+                'title': row[1],
+                'question': row[2],
                 'resources': resources,
                 'criteria': criteria,
-                'mindmap': row['mindmap'] or '',
+                'mindmap': row[5] or '',
                 'images': images,
-                'created_at': row['created_at']
+                'created_at': row[7]
             })
         
         cursor.close()
@@ -187,34 +185,33 @@ def get_assignment(assignment_id):
         release_db(conn)
         
         if row:
-            # JSONB fields come back as Python lists/dicts already
-            resources = row['resources']
+            resources = row[3]
             if resources is None:
                 resources = []
             elif isinstance(resources, str):
                 resources = json.loads(resources)
                 
-            criteria = row['criteria']
+            criteria = row[4]
             if criteria is None:
                 criteria = []
             elif isinstance(criteria, str):
                 criteria = json.loads(criteria)
                 
-            images = row['images']
+            images = row[6]
             if images is None:
                 images = []
             elif isinstance(images, str):
                 images = json.loads(images)
             
             return {
-                'id': row['id'],
-                'title': row['title'],
-                'question': row['question'],
+                'id': row[0],
+                'title': row[1],
+                'question': row[2],
                 'resources': resources,
                 'criteria': criteria,
-                'mindmap': row['mindmap'] or '',
+                'mindmap': row[5] or '',
                 'images': images,
-                'created_at': row['created_at']
+                'created_at': row[7]
             }
         return None
         
@@ -251,7 +248,6 @@ def save_submission(student_name, assignment_id, content):
         conn = get_db()
         cursor = conn.cursor()
         
-        # Check if submission exists
         cursor.execute('SELECT id FROM submissions WHERE student_name = %s AND assignment_id = %s', 
                        (student_name, assignment_id))
         existing = cursor.fetchone()
@@ -298,7 +294,17 @@ def get_submissions(assignment_id=None):
         cursor.close()
         release_db(conn)
         
-        return [dict(row) for row in rows]
+        submissions_list = []
+        for row in rows:
+            submissions_list.append({
+                'id': row[0],
+                'student_name': row[1],
+                'assignment_id': row[2],
+                'content': row[3] or '',
+                'status': row[4],
+                'submitted_at': row[5]
+            })
+        return submissions_list
         
     except Exception as e:
         print(f"Error getting submissions: {e}")
@@ -346,13 +352,13 @@ def get_student_work():
         
         work_dict = {}
         for row in rows:
-            key = f"{row['student_name']}_{row['assignment_id']}"
+            key = f"{row[1]}_{row[2]}"
             work_dict[key] = {
-                'student_name': row['student_name'],
-                'assignment_id': row['assignment_id'],
-                'content': row['content'] or '',
-                'last_updated': row['last_updated'],
-                'status': row['status']
+                'student_name': row[1],
+                'assignment_id': row[2],
+                'content': row[3] or '',
+                'last_updated': row[4],
+                'status': row[5]
             }
         return work_dict
         
