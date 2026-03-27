@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
+from contextlib import contextmanager
 
 # Get database URL from environment variable
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/classwrite')
@@ -14,23 +15,23 @@ pool = ThreadedConnectionPool(
     dsn=DATABASE_URL
 )
 
+@contextmanager
 def get_db():
-    """Get a connection from the pool"""
-    return pool.getconn()
-
-def release_db(conn):
-    """Release a connection back to the pool"""
-    if conn:
+    """Context manager that gets a connection and always returns it to the pool."""
+    conn = pool.getconn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         pool.putconn(conn)
 
 def init_db():
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         
-        # Create tables
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS assignments (
                 id SERIAL PRIMARY KEY,
@@ -69,28 +70,13 @@ def init_db():
             )
         ''')
         
-        conn.commit()
+        cursor.close()
         print("Database tables created/verified successfully")
-        
-    except Exception as e:
-        print(f"Error initializing database: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            release_db(conn)
 
 def save_assignment(title, question, resources, criteria, mindmap, images):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         
-        # Convert lists to JSON strings for storage
         resources_json = json.dumps(resources)
         criteria_json = json.dumps(criteria)
         images_json = json.dumps(images)
@@ -101,36 +87,19 @@ def save_assignment(title, question, resources, criteria, mindmap, images):
         ''', (title, question, resources_json, criteria_json, mindmap, images_json))
         
         assignment_id = cursor.fetchone()[0]
-        conn.commit()
-        
         cursor.close()
-        release_db(conn)
-        return get_assignment(assignment_id)
-        
-    except Exception as e:
-        print(f"Error saving assignment: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor and not cursor.closed:
-            cursor.close()
-        if conn:
-            release_db(conn)
+    
+    # Connection is fully released before calling get_assignment
+    return get_assignment(assignment_id)
 
 def get_assignment(assignment_id):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM assignments WHERE id = %s', (assignment_id,))
         row = cursor.fetchone()
         cursor.close()
-        release_db(conn)
         
         if row:
-            # Parse JSON strings back to Python objects
             resources = json.loads(row[3]) if row[3] else []
             criteria = json.loads(row[4]) if row[4] else []
             images = json.loads(row[6]) if row[6] else []
@@ -146,27 +115,16 @@ def get_assignment(assignment_id):
                 'created_at': row[7]
             }
         return None
-        
-    except Exception as e:
-        print(f"Error getting assignment {assignment_id}: {e}")
-        if conn:
-            release_db(conn)
-        raise
 
 def get_assignments():
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM assignments ORDER BY created_at DESC')
         rows = cursor.fetchall()
         cursor.close()
-        release_db(conn)
         
         assignments_list = []
         for row in rows:
-            # Parse JSON strings back to Python objects
             resources = json.loads(row[3]) if row[3] else []
             criteria = json.loads(row[4]) if row[4] else []
             images = json.loads(row[6]) if row[6] else []
@@ -183,38 +141,15 @@ def get_assignments():
             })
         
         return assignments_list
-        
-    except Exception as e:
-        print(f"Error getting assignments: {e}")
-        if conn:
-            release_db(conn)
-        raise
 
 def delete_assignment(assignment_id):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM assignments WHERE id = %s', (assignment_id,))
-        conn.commit()
-        
-    except Exception as e:
-        print(f"Error deleting assignment {assignment_id}: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            release_db(conn)
+        cursor.close()
 
 def save_submission(student_name, assignment_id, content):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         
         cursor.execute('SELECT id FROM submissions WHERE student_name = %s AND assignment_id = %s', 
@@ -233,24 +168,10 @@ def save_submission(student_name, assignment_id, content):
                 VALUES (%s, %s, %s, 'submitted')
             ''', (student_name, assignment_id, content))
         
-        conn.commit()
-        
-    except Exception as e:
-        print(f"Error saving submission: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            release_db(conn)
+        cursor.close()
 
 def get_submissions(assignment_id=None):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         
         if assignment_id:
@@ -261,7 +182,6 @@ def get_submissions(assignment_id=None):
         
         rows = cursor.fetchall()
         cursor.close()
-        release_db(conn)
         
         submissions_list = []
         for row in rows:
@@ -274,18 +194,9 @@ def get_submissions(assignment_id=None):
                 'submitted_at': row[5]
             })
         return submissions_list
-        
-    except Exception as e:
-        print(f"Error getting submissions: {e}")
-        if conn:
-            release_db(conn)
-        raise
 
 def save_student_work(student_name, assignment_id, content):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -295,29 +206,14 @@ def save_student_work(student_name, assignment_id, content):
             DO UPDATE SET content = %s, last_updated = CURRENT_TIMESTAMP, status = 'in_progress'
         ''', (student_name, assignment_id, content, content))
         
-        conn.commit()
-        
-    except Exception as e:
-        print(f"Error saving student work: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            release_db(conn)
+        cursor.close()
 
 def get_student_work():
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM student_work ORDER BY last_updated DESC')
         rows = cursor.fetchall()
         cursor.close()
-        release_db(conn)
         
         work_dict = {}
         for row in rows:
@@ -330,33 +226,13 @@ def get_student_work():
                 'status': row[5]
             }
         return work_dict
-        
-    except Exception as e:
-        print(f"Error getting student work: {e}")
-        if conn:
-            release_db(conn)
-        raise
 
 def delete_student_work(student_name, assignment_id):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM student_work WHERE student_name = %s AND assignment_id = %s', 
                        (student_name, assignment_id))
-        conn.commit()
-        
-    except Exception as e:
-        print(f"Error deleting student work: {e}")
-        if conn:
-            conn.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            release_db(conn)
+        cursor.close()
 
 # Initialize database
 try:
