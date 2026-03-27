@@ -6,9 +6,9 @@
     <title>ClassWrite | Collaborative Writing Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <!-- Socket.IO client — required for real-time live progress -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
+        /* Keep all your existing CSS styles exactly as they are */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
@@ -355,42 +355,84 @@
 
 <script>
 // ============================================================
-//  STATE
+//  STATE & PERSISTENCE
 // ============================================================
 let currentRole = null;
 let currentStudent = null;
 let currentStudentPin = null;
 let currentAssignmentId = null;
 let autoSaveTimer = null;
+let currentPage = null;
 
 // In-memory data (loaded fresh from server on each login)
 let assignments = [];
 let submissions = [];
 let studentWorks = {}; // { "StudentName_assignmentId": { ... } }
 
-// ---- Session persistence helpers ----
+// ============================================================
+//  PERSISTENCE FUNCTIONS
+// ============================================================
 function saveSession() {
     if (currentRole === 'teacher') {
-        sessionStorage.setItem('cw_role', 'teacher');
-        sessionStorage.removeItem('cw_student');
-        sessionStorage.removeItem('cw_pin');
+        localStorage.setItem('classwrite_session', JSON.stringify({
+            role: 'teacher',
+            email: 'maria_gul28@yahoo.com'
+        }));
     } else if (currentRole === 'student') {
-        sessionStorage.setItem('cw_role', 'student');
-        sessionStorage.setItem('cw_student', currentStudent);
-        sessionStorage.setItem('cw_pin', currentStudentPin);
-    }
-    if (currentAssignmentId !== null) {
-        sessionStorage.setItem('cw_assignment', currentAssignmentId);
-    } else {
-        sessionStorage.removeItem('cw_assignment');
+        localStorage.setItem('classwrite_session', JSON.stringify({
+            role: 'student',
+            name: currentStudent,
+            pin: currentStudentPin
+        }));
     }
 }
+
+function saveCurrentPage() {
+    if (currentRole && currentPage) {
+        localStorage.setItem('classwrite_current_page', JSON.stringify({
+            role: currentRole,
+            page: currentPage,
+            assignmentId: currentAssignmentId
+        }));
+    }
+}
+
+function loadSession() {
+    const saved = localStorage.getItem('classwrite_session');
+    if (saved) {
+        try {
+            const session = JSON.parse(saved);
+            if (session.role === 'teacher') {
+                return { role: 'teacher', email: session.email };
+            } else if (session.role === 'student') {
+                return { role: 'student', name: session.name, pin: session.pin };
+            }
+        } catch (e) {
+            console.error('Failed to parse session', e);
+        }
+    }
+    return null;
+}
+
+function loadSavedPage() {
+    const saved = localStorage.getItem('classwrite_current_page');
+    if (saved) {
+        try {
+            return JSON.parse(saved);
+        } catch (e) {
+            console.error('Failed to parse saved page', e);
+        }
+    }
+    return null;
+}
+
 function clearSession() {
-    ['cw_role','cw_student','cw_pin','cw_assignment'].forEach(k => sessionStorage.removeItem(k));
+    localStorage.removeItem('classwrite_session');
+    localStorage.removeItem('classwrite_current_page');
 }
 
 // ============================================================
-//  SOCKET.IO  — real-time connection to Flask backend
+//  SOCKET.IO — real-time connection to Flask backend
 // ============================================================
 const socket = io({ transports: ['websocket', 'polling'] });
 
@@ -412,25 +454,19 @@ socket.on('connect_error', () => {
 socket.on('progress_update', (data) => {
     const key = `${data.student_name}_${data.assignment_id}`;
     studentWorks[key] = data;
-    const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
-    if (currentRole === 'teacher' && activeSidebarBtn && activeSidebarBtn.dataset.page === 'progress') {
-        if (activeProgressTab === key) {
-            const previewEl = document.getElementById('progressPreviewText');
-            const card = document.getElementById('activeStudentCard');
-            if (previewEl) {
-                const fullContent = data.content || '';
-                previewEl.textContent = fullContent;
-                const charCount = fullContent.length;
-                const wordCount = fullContent.trim().split(/\s+/).filter(Boolean).length;
-                const charsEl = card ? card.querySelector('.progress-chars') : null;
-                if (charsEl) charsEl.textContent = `${wordCount} word${wordCount===1?'':'s'} · ${charCount} characters`;
-                const timeEl = card ? card.querySelector('.progress-time') : null;
-                if (timeEl) timeEl.textContent = `Last update: ${new Date(data.last_updated||Date.now()).toLocaleTimeString()}`;
-            } else {
+    
+    // Update UI if teacher is on relevant page
+    if (currentRole === 'teacher') {
+        const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
+        if (activeSidebarBtn) {
+            const page = activeSidebarBtn.dataset.page;
+            if (page === 'overview') {
+                renderTeacherOverview();
+            } else if (page === 'progress') {
                 renderLiveProgress();
+            } else if (page === 'submissions') {
+                renderSubmissions();
             }
-        } else {
-            renderLiveProgress();
         }
     }
 });
@@ -450,9 +486,9 @@ socket.on('submission_update', (data) => {
         const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
         if (activeSidebarBtn) {
             const page = activeSidebarBtn.dataset.page;
-            if (page === 'submissions') renderSubmissions();
+            if (page === 'overview') renderTeacherOverview();
             else if (page === 'progress') renderLiveProgress();
-            else if (page === 'overview') renderTeacherOverview();
+            else if (page === 'submissions') renderSubmissions();
         }
     }
 });
@@ -461,6 +497,10 @@ socket.on('submission_update', (data) => {
 socket.on('student_joined', (data) => {
     if (currentRole === 'teacher') {
         showToast(`👋 ${data.student_name} joined assignment #${data.assignment_id}`);
+        const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
+        if (activeSidebarBtn && activeSidebarBtn.dataset.page === 'overview') {
+            renderTeacherOverview();
+        }
     }
 });
 
@@ -477,7 +517,7 @@ function hideBanner() {
 }
 
 // ============================================================
-//  API HELPERS  — all data goes through Flask, not localStorage
+//  API HELPERS — all data goes through Flask, not localStorage
 // ============================================================
 async function apiFetch(url, options = {}) {
     try {
@@ -519,50 +559,79 @@ function showToast(msg, duration = 2800) {
 // ============================================================
 //  RENDER APP SHELL
 // ============================================================
-function renderApp() {
+function renderApp(restorePage = null) {
     const sidebar = document.getElementById('sidebarNav');
 
     if (currentRole === 'teacher') {
         sidebar.innerHTML = `
             <div>
                 <div class="sidebar-section-label">DASHBOARD</div>
-                <button class="sidebar-btn active" data-page="overview">🏠 Overview</button>
+                <button class="sidebar-btn" data-page="overview">🏠 Overview</button>
                 <button class="sidebar-btn" data-page="create">✏️ New Assignment</button>
                 <button class="sidebar-btn" data-page="assignments">📚 Assignments</button>
                 <button class="sidebar-btn" data-page="progress"><span class="live-dot"></span>Live Progress</button>
                 <button class="sidebar-btn" data-page="submissions">✅ Submissions</button>
             </div>
         `;
-        renderTeacherOverview();
+        
+        if (restorePage && restorePage.page) {
+            navigateToPage(restorePage.page);
+        } else {
+            renderTeacherOverview();
+            currentPage = 'overview';
+            setActiveSidebarBtn('overview');
+        }
     } else {
         sidebar.innerHTML = `
             <div>
                 <div class="sidebar-section-label">CLASSROOM</div>
-                <button class="sidebar-btn active" data-page="studentAssignments">📚 Assignments</button>
-                <button class="sidebar-btn" data-page="drafts">📝 Drafts</button>
-                <button class="sidebar-btn" data-page="myWork">✅ My Work</button>
+                <button class="sidebar-btn" data-page="studentAssignments">📚 Assignments</button>
+                <button class="sidebar-btn" data-page="myWork">📝 My Work</button>
             </div>
         `;
-        renderStudentAssignments();
+        
+        if (restorePage && restorePage.page) {
+            navigateToPage(restorePage.page);
+        } else {
+            renderStudentAssignments();
+            currentPage = 'studentAssignments';
+            setActiveSidebarBtn('studentAssignments');
+        }
     }
 
     document.querySelectorAll('.sidebar-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
             const page = btn.dataset.page;
-            if (currentRole === 'teacher') {
-                if (page === 'overview') renderTeacherOverview();
-                else if (page === 'create') renderCreateAssignment();
-                else if (page === 'assignments') renderTeacherAssignments();
-                else if (page === 'progress') renderLiveProgress();
-                else if (page === 'submissions') renderSubmissions();
-            } else {
-                if (page === 'studentAssignments') renderStudentAssignments();
-                else if (page === 'drafts') renderDrafts();
-                else if (page === 'myWork') renderMyWork();
-            }
+            navigateToPage(page);
         });
+    });
+}
+
+function navigateToPage(page) {
+    currentPage = page;
+    saveCurrentPage();
+    
+    if (currentRole === 'teacher') {
+        if (page === 'overview') renderTeacherOverview();
+        else if (page === 'create') renderCreateAssignment();
+        else if (page === 'assignments') renderTeacherAssignments();
+        else if (page === 'progress') renderLiveProgress();
+        else if (page === 'submissions') renderSubmissions();
+    } else {
+        if (page === 'studentAssignments') renderStudentAssignments();
+        else if (page === 'myWork') renderMyWork();
+    }
+    
+    setActiveSidebarBtn(page);
+}
+
+function setActiveSidebarBtn(page) {
+    document.querySelectorAll('.sidebar-btn').forEach(btn => {
+        if (btn.dataset.page === page) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
     });
 }
 
@@ -578,20 +647,22 @@ function renderTeacherOverview() {
             <div class="page-title">Good day, Teacher ✨</div>
             <div class="page-subtitle">Your classroom, live</div>
             <div class="stats-row">
-                <div class="stat-card"><div class="stat-number">${assignments.length}</div><div class="stat-label">Assignments</div></div>
-                <div class="stat-card"><div class="stat-number">${activeWriters}</div><div class="stat-label"><span class="live-dot"></span>Active Writers</div></div>
-                <div class="stat-card"><div class="stat-number">${submissions.length}</div><div class="stat-label">Submissions</div></div>
+                <div class="stat-card"><div class="stat-number" id="statAssignments">${assignments.length}</div><div class="stat-label">Assignments</div></div>
+                <div class="stat-card"><div class="stat-number" id="statActiveWriters">${activeWriters}</div><div class="stat-label"><span class="live-dot"></span>Active Writers</div></div>
+                <div class="stat-card"><div class="stat-number" id="statSubmissions">${submissions.length}</div><div class="stat-label">Submissions</div></div>
             </div>
             <div class="card">
                 <div class="card-title">📬 Recent Submissions</div>
-                ${recentSubs.length === 0
-                    ? '<div class="empty-state"><span class="empty-state-icon">📭</span>No submissions yet</div>'
-                    : recentSubs.map(s => `
-                        <div class="work-item">
-                            <strong>${s.student_name}</strong> — Assignment #${s.assignment_id}
-                            <div style="font-size:0.78rem;margin-top:6px;color:#4a3f35">${(s.content||'').substring(0,120)}…</div>
-                            <div style="font-size:0.72rem;color:#8a7a6e;margin-top:6px">${new Date(s.submitted_at).toLocaleString()}</div>
-                        </div>`).join('')}
+                <div id="recentSubmissionsList">
+                    ${recentSubs.length === 0
+                        ? '<div class="empty-state"><span class="empty-state-icon">📭</span>No submissions yet</div>'
+                        : recentSubs.map(s => `
+                            <div class="work-item">
+                                <strong>${escapeHtml(s.student_name)}</strong> — Assignment #${s.assignment_id}
+                                <div style="font-size:0.78rem;margin-top:6px;color:#4a3f35">${escapeHtml((s.content||'').substring(0,120))}…</div>
+                                <div style="font-size:0.72rem;color:#8a7a6e;margin-top:6px">${new Date(s.submitted_at).toLocaleString()}</div>
+                            </div>`).join('')}
+                </div>
             </div>
         </div>
     `;
@@ -633,8 +704,8 @@ function renderCreateAssignment() {
     `;
 
     let resourcesArr = [], criteriaArr = [];
-    const updateResUI  = () => { document.getElementById('resList').innerHTML  = resourcesArr.map((r,i)=>`<span class="tag">📌 ${r} <button class="tag-remove" data-i="${i}" data-t="res">✕</button></span>`).join(''); };
-    const updateCritUI = () => { document.getElementById('critList').innerHTML = criteriaArr.map((c,i)=>`<span class="tag">◆ ${c} <button class="tag-remove" data-i="${i}" data-t="crit">✕</button></span>`).join(''); };
+    const updateResUI  = () => { document.getElementById('resList').innerHTML  = resourcesArr.map((r,i)=>`<span class="tag">📌 ${escapeHtml(r)} <button class="tag-remove" data-i="${i}" data-t="res">✕</button></span>`).join(''); };
+    const updateCritUI = () => { document.getElementById('critList').innerHTML = criteriaArr.map((c,i)=>`<span class="tag">◆ ${escapeHtml(c)} <button class="tag-remove" data-i="${i}" data-t="crit">✕</button></span>`).join(''); };
 
     document.getElementById('addResBtn').onclick  = () => { const v = document.getElementById('resInput').value.trim();  if(v){ resourcesArr.push(v);  updateResUI();  document.getElementById('resInput').value=''; } };
     document.getElementById('addCritBtn').onclick = () => { const v = document.getElementById('critInput').value.trim(); if(v){ criteriaArr.push(v); updateCritUI(); document.getElementById('critInput').value=''; } };
@@ -706,8 +777,7 @@ function renderCreateAssignment() {
         if (result) {
             assignments.push(result);
             showToast(`✅ "${title}" published!`);
-            // Switch to Assignments tab
-            document.querySelector('.sidebar-btn[data-page="assignments"]').click();
+            navigateToPage('assignments');
         } else {
             btn.innerHTML = '📢 Publish Assignment';
             btn.disabled = false;
@@ -719,7 +789,7 @@ function renderTeacherAssignments() {
     const content = document.getElementById('mainContent');
     if (assignments.length === 0) {
         content.innerHTML = `<div class="page active"><div class="card"><div class="empty-state"><span class="empty-state-icon">📭</span>No assignments yet.<br><button class="btn btn-ghost" id="goCreateBtn" style="margin-top:16px">Create one</button></div></div></div>`;
-        document.getElementById('goCreateBtn')?.addEventListener('click', () => document.querySelector('.sidebar-btn[data-page="create"]').click());
+        document.getElementById('goCreateBtn')?.addEventListener('click', () => navigateToPage('create'));
         return;
     }
     content.innerHTML = `
@@ -728,8 +798,8 @@ function renderTeacherAssignments() {
             <div class="page-subtitle">${assignments.length} assignment${assignments.length===1?'':'s'} published</div>
             ${assignments.map(a => `
                 <div class="assignment-card">
-                    <div class="assignment-card-title">${a.title}</div>
-                    <div style="color:#4a3f35;font-size:0.9rem">${(a.question||'').substring(0,100)}…</div>
+                    <div class="assignment-card-title">${escapeHtml(a.title)}</div>
+                    <div style="color:#4a3f35;font-size:0.9rem">${escapeHtml((a.question||'').substring(0,100))}…</div>
                     <div class="assignment-card-meta">
                         <span class="tag">📎 ${a.resources?.length||0} resources</span>
                         <span class="tag">📋 ${a.criteria?.length||0} criteria</span>
@@ -757,7 +827,7 @@ function renderTeacherAssignments() {
 // Track which student tab is active in live progress
 let activeProgressTab = null;
 
-function renderLiveProgress(forceTab) {
+function renderLiveProgress() {
     const content = document.getElementById('mainContent');
     const activeList = Object.values(studentWorks);
 
@@ -773,9 +843,7 @@ function renderLiveProgress(forceTab) {
     }
 
     // Pick default tab if none selected or previous tab left
-    if (forceTab) {
-        activeProgressTab = forceTab;
-    } else if (!activeProgressTab || !studentWorks[activeProgressTab]) {
+    if (!activeProgressTab || !studentWorks[activeProgressTab]) {
         activeProgressTab = Object.keys(studentWorks)[0];
     }
 
@@ -792,7 +860,7 @@ function renderLiveProgress(forceTab) {
         const isActive = key === activeProgressTab;
         return `<button class="student-tab ${isActive ? 'active' : ''}" data-key="${key}">
             <span class="tab-dot"></span>
-            <span>${sw.student_name}</span>
+            <span>${escapeHtml(sw.student_name)}</span>
             <span class="tab-words">${wc}w</span>
         </button>`;
     }).join('');
@@ -805,12 +873,12 @@ function renderLiveProgress(forceTab) {
             <div class="progress-card" id="activeStudentCard">
                 <div class="progress-card-header">
                     <div>
-                        <div class="progress-student">✍️ ${w.student_name}</div>
-                        <div style="font-size:0.78rem;color:#8a7a6e;margin-top:2px">${assignTitle}</div>
+                        <div class="progress-student">✍️ ${escapeHtml(w.student_name)}</div>
+                        <div style="font-size:0.78rem;color:#8a7a6e;margin-top:2px">${escapeHtml(assignTitle)}</div>
                     </div>
                     <div class="progress-time">Last update: ${updated}</div>
                 </div>
-                <div class="progress-preview" id="progressPreviewText">${fullContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                <div class="progress-preview" id="progressPreviewText">${escapeHtml(fullContent)}</div>
                 <div class="progress-chars">${wordCount} word${wordCount===1?'':'s'} · ${charCount} characters</div>
             </div>
         </div>`;
@@ -838,8 +906,8 @@ function renderSubmissions() {
                 const assignTitle = assignments.find(a=>a.id===s.assignment_id)?.title || `Assignment #${s.assignment_id}`;
                 return `
                     <div class="work-item">
-                        <strong>${s.student_name}</strong> — <em>${assignTitle}</em>
-                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.88rem;margin-top:10px;line-height:1.65">${(s.content||'').substring(0,300).replace(/</g,'&lt;')}${s.content?.length>300?'…':''}</div>
+                        <strong>${escapeHtml(s.student_name)}</strong> — <em>${escapeHtml(assignTitle)}</em>
+                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.88rem;margin-top:10px;line-height:1.65">${escapeHtml((s.content||'').substring(0,300))}${s.content?.length>300?'…':''}</div>
                         <div class="autosave-indicator" style="margin-top:8px">Submitted: ${new Date(s.submitted_at).toLocaleString()}</div>
                     </div>`;
             }).join('')}
@@ -860,17 +928,14 @@ function renderStudentAssignments() {
             <div class="page-title">📖 Assignments</div>
             ${assignments.map(a => {
                 const submitted = submissions.some(s => s.student_name===currentStudent && s.assignment_id===a.id);
-                const hasDraft  = !submitted && !!studentWorks[`${currentStudent}_${a.id}`];
                 return `
                     <div class="assignment-card" data-id="${a.id}">
-                        <div class="assignment-card-title">${a.title}</div>
-                        <div style="color:#4a3f35;font-size:0.9rem">${(a.question||'').substring(0,90)}…</div>
+                        <div class="assignment-card-title">${escapeHtml(a.title)}</div>
+                        <div style="color:#4a3f35;font-size:0.9rem">${escapeHtml((a.question||'').substring(0,90))}…</div>
                         <div class="assignment-card-meta">
                             ${submitted
                                 ? '<span class="badge" style="background:#d6ebe1;color:#3e5a4c">✓ Submitted</span>'
-                                : hasDraft
-                                    ? '<span class="badge" style="background:#fdf5ec;color:#c47a3a">📝 Draft in progress</span>'
-                                    : '<span class="badge">✨ Click to write</span>'}
+                                : '<span class="badge">✨ Click to write</span>'}
                         </div>
                     </div>`;
             }).join('')}
@@ -884,7 +949,7 @@ function openAssignment(id) {
     const assignment = assignments.find(a => a.id === id);
     if (!assignment) return;
     currentAssignmentId = id;
-    saveSession(); // persist open assignment
+    saveCurrentPage();
 
     // Notify server that student joined
     socket.emit('join_assignment', { student_name: currentStudent, assignment_id: id });
@@ -918,25 +983,25 @@ function openAssignment(id) {
         <div class="page active">
             <button class="btn btn-ghost" id="backToAssignments" style="margin-bottom:20px">← Back</button>
             <div class="card">
-                <div class="card-title">${assignment.title}</div>
-                <div style="white-space:pre-wrap;line-height:1.7;color:#4a3f35">${assignment.question.replace(/</g,'&lt;')}</div>
+                <div class="card-title">${escapeHtml(assignment.title)}</div>
+                <div style="white-space:pre-wrap;line-height:1.7;color:#4a3f35">${escapeHtml(assignment.question)}</div>
             </div>
             ${assignment.criteria?.length ? `
                 <div class="card">
                     <div class="card-title">✅ Success Criteria</div>
-                    ${assignment.criteria.map(c=>`<div style="margin-bottom:8px;display:flex;align-items:flex-start;gap:8px"><span style="color:#c47a3a;font-size:0.85rem;margin-top:2px">◆</span><span style="font-size:0.92rem;line-height:1.5">${c.replace(/</g,'&lt;')}</span></div>`).join('')}
+                    ${assignment.criteria.map(c=>`<div style="margin-bottom:8px;display:flex;align-items:flex-start;gap:8px"><span style="color:#c47a3a;font-size:0.85rem;margin-top:2px">◆</span><span style="font-size:0.92rem;line-height:1.5">${escapeHtml(c)}</span></div>`).join('')}
                 </div>` : ''}
             ${assignment.resources?.length ? `
                 <div class="card">
                     <div class="card-title">🔗 Resources</div>
                     <div style="display:flex;flex-wrap:wrap;gap:4px">
-                        ${assignment.resources.map(r=>`<a href="${r.startsWith('http')?r.replace(/"/g,'&quot;'):'#'}" target="_blank" rel="noopener" class="resource-link-item">🔗 ${r.replace(/</g,'&lt;')}</a>`).join('')}
+                        ${assignment.resources.map(r=>`<a href="${r.startsWith('http')?r.replace(/"/g,'&quot;'):'#'}" target="_blank" rel="noopener" class="resource-link-item">🔗 ${escapeHtml(r)}</a>`).join('')}
                     </div>
                 </div>` : ''}
             ${slideshowHtml}
             <div class="card">
                 <div class="card-title">✍️ Your Writing</div>
-                <textarea id="studentWritingArea" class="writing-area" rows="14" placeholder="Start writing here…">${savedContent.replace(/</g,'&lt;')}</textarea>
+                <textarea id="studentWritingArea" class="writing-area" rows="14" placeholder="Start writing here…">${escapeHtml(savedContent)}</textarea>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
                     <div class="autosave-indicator">
                         <span id="saveStatusDot" class="autosave-dot saved"></span>
@@ -1022,74 +1087,14 @@ function openAssignment(id) {
             if (existing !== -1) submissions[existing] = sub;
             else submissions.push(sub);
             showToast('✨ Assignment submitted!');
-            renderStudentAssignments();
+            navigateToPage('studentAssignments');
         } else {
             btn.innerHTML = '📤 Submit Assignment';
             btn.disabled = false;
         }
     };
 
-    document.getElementById('backToAssignments').onclick = () => {
-        currentAssignmentId = null;
-        saveSession();
-        renderStudentAssignments();
-    };
-}
-
-function renderDrafts() {
-    const content = document.getElementById('mainContent');
-    // Filter drafts for this student that haven't been submitted
-    const myDrafts = Object.values(studentWorks).filter(w =>
-        w.student_name === currentStudent && w.status === 'in_progress'
-    );
-
-    if (myDrafts.length === 0) {
-        content.innerHTML = `
-            <div class="page active">
-                <div class="page-title">📝 Drafts</div>
-                <div class="card">
-                    <div class="empty-state">
-                        <span class="empty-state-icon">✏️</span>
-                        No drafts yet. Start an assignment to see your work in progress here.
-                    </div>
-                </div>
-            </div>`;
-        return;
-    }
-
-    content.innerHTML = `
-        <div class="page active">
-            <div class="page-title">📝 Drafts</div>
-            <div class="page-subtitle">${myDrafts.length} in-progress assignment${myDrafts.length===1?'':'s'}</div>
-            ${myDrafts.map(w => {
-                const assignTitle = assignments.find(a => a.id === w.assignment_id)?.title || `Assignment #${w.assignment_id}`;
-                const wc = (w.content || '').trim().split(/\s+/).filter(Boolean).length;
-                const preview = (w.content || '').substring(0, 200);
-                const updated = w.last_updated ? new Date(w.last_updated).toLocaleString() : '';
-                return `
-                    <div class="work-item" style="cursor:pointer;transition:0.2s;border-left-color:#c47a3a" data-aid="${w.assignment_id}">
-                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-                            <div>
-                                <strong style="font-size:1rem">${assignTitle}</strong>
-                                <span class="badge" style="margin-left:10px;background:#fdf5ec;color:#c47a3a">Draft · ${wc} word${wc===1?'':'s'}</span>
-                            </div>
-                            <button class="btn btn-primary draft-continue-btn" data-aid="${w.assignment_id}" style="flex-shrink:0;font-size:0.8rem">Continue →</button>
-                        </div>
-                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.88rem;margin-top:10px;line-height:1.65;color:#4a3f35">${preview.replace(/</g,'&lt;')}${w.content?.length>200?'…':''}</div>
-                        <div class="autosave-indicator" style="margin-top:8px">Last saved: ${updated}</div>
-                    </div>`;
-            }).join('')}
-        </div>`;
-
-    content.querySelectorAll('.draft-continue-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openAssignment(parseInt(btn.dataset.aid));
-        });
-    });
-    content.querySelectorAll('.work-item[data-aid]').forEach(item => {
-        item.addEventListener('click', () => openAssignment(parseInt(item.dataset.aid)));
-    });
+    document.getElementById('backToAssignments').onclick = () => navigateToPage('studentAssignments');
 }
 
 function renderMyWork() {
@@ -1106,8 +1111,8 @@ function renderMyWork() {
                 const assignTitle = assignments.find(a=>a.id===s.assignment_id)?.title || `Assignment #${s.assignment_id}`;
                 return `
                     <div class="work-item">
-                        <strong>${assignTitle}</strong>
-                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.9rem;margin-top:10px;line-height:1.65">${(s.content||'').substring(0,300).replace(/</g,'&lt;')}…</div>
+                        <strong>${escapeHtml(assignTitle)}</strong>
+                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.9rem;margin-top:10px;line-height:1.65">${escapeHtml((s.content||'').substring(0,300))}…</div>
                         <div class="autosave-indicator" style="margin-top:8px">✓ Submitted: ${new Date(s.submitted_at).toLocaleString()}</div>
                     </div>`;
             }).join('')}
@@ -1115,9 +1120,25 @@ function renderMyWork() {
 }
 
 // ============================================================
-//  ROLE FLOW
+//  ROLE FLOW WITH PERSISTENCE
 // ============================================================
-async function enterAs(role, opts = {}) {
+async function restoreSession() {
+    const session = loadSession();
+    if (!session) return false;
+    
+    if (session.role === 'teacher') {
+        currentRole = 'teacher';
+        await enterAs('teacher', true);
+    } else if (session.role === 'student') {
+        currentStudent = session.name;
+        currentStudentPin = session.pin;
+        currentRole = 'student';
+        await enterAs('student', true);
+    }
+    return true;
+}
+
+async function enterAs(role, isRestore = false) {
     showBanner('⏳ Loading classroom data…', false);
 
     if (role === 'teacher') currentRole = 'teacher';
@@ -1132,18 +1153,41 @@ async function enterAs(role, opts = {}) {
     if (role === 'teacher') {
         document.getElementById('userBadge').innerHTML = '👩‍🏫 Teacher · Maria';
     } else {
-        document.getElementById('userBadge').innerHTML = `✍️ ${currentStudent}`;
+        document.getElementById('userBadge').innerHTML = `✍️ ${escapeHtml(currentStudent)}`;
     }
 
-    saveSession();
-    renderApp();
-
-    // Restore student's open assignment after refresh
-    if (role === 'student' && opts.restoreAssignmentId) {
-        const aid = parseInt(opts.restoreAssignmentId);
-        const found = assignments.find(a => a.id === aid);
-        if (found) openAssignment(aid);
+    // Save session if this is a new login
+    if (!isRestore) {
+        saveSession();
     }
+
+    // Restore previous page if available
+    const savedPage = loadSavedPage();
+    if (savedPage && savedPage.role === role) {
+        renderApp(savedPage);
+        if (savedPage.assignmentId && role === 'student') {
+            currentAssignmentId = savedPage.assignmentId;
+            // Only restore assignment if it still exists
+            if (assignments.find(a => a.id === savedPage.assignmentId)) {
+                openAssignment(savedPage.assignmentId);
+            }
+        }
+    } else {
+        renderApp();
+    }
+}
+
+// ============================================================
+//  UTILITY FUNCTIONS
+// ============================================================
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
 
 // ============================================================
@@ -1191,40 +1235,17 @@ document.getElementById('studentPin').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('confirmStudentBtn').click();
 });
 
-// ============================================================
-//  AUTO-RESTORE SESSION ON REFRESH
-// ============================================================
-(async () => {
-    const savedRole = sessionStorage.getItem('cw_role');
-    if (!savedRole) return; // fresh visit, show entry screen
-
-    const savedAssignment = sessionStorage.getItem('cw_assignment');
-
-    if (savedRole === 'teacher') {
-        currentRole = 'teacher';
-        await enterAs('teacher');
-        showToast('Welcome back, Teacher! 🎓');
-    } else if (savedRole === 'student') {
-        const savedName = sessionStorage.getItem('cw_student');
-        const savedPin  = sessionStorage.getItem('cw_pin');
-        if (savedName && savedPin) {
-            currentStudent    = savedName;
-            currentStudentPin = savedPin;
-            await enterAs('student', { restoreAssignmentId: savedAssignment });
-            showToast(`Welcome back, ${savedName}! ✍️`);
-        }
-    }
-})();
-
-
 document.getElementById('signOutBtn').onclick = () => {
-    currentRole = null; currentStudent = null; currentStudentPin = null; currentAssignmentId = null;
-    assignments = []; submissions = []; studentWorks = {};
     clearSession();
+    currentRole = null; currentStudent = null; currentStudentPin = null;
+    assignments = []; submissions = []; studentWorks = {};
     document.getElementById('appShell').style.display = 'none';
     document.getElementById('entryScreen').style.display = 'flex';
     showToast('Signed out');
 };
+
+// Try to restore session on page load
+restoreSession();
 </script>
 </body>
 </html>
