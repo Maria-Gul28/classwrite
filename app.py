@@ -1,3 +1,9 @@
+import os
+import sys
+print("Python version:", sys.version)
+print("Starting app...")
+print("Current directory:", os.getcwd())
+
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 from datetime import datetime
@@ -5,7 +11,13 @@ import database
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    logger=True,
+    engineio_logger=True
+)
 
 # Routes
 @app.route('/')
