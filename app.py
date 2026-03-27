@@ -11,12 +11,11 @@ import database
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
-app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB max upload
 
-# Try to use eventlet, fall back to threading if not available
+# Try to use gevent, fall back to threading if not available
 try:
-    import eventlet
-    async_mode = 'eventlet'
+    import gevent
+    async_mode = 'gevent'
 except ImportError:
     async_mode = 'threading'
 
