@@ -774,9 +774,9 @@ function renderCreateAssignment() {
     }
 
     function processImageFiles(files) {
-        const remaining = 5 - imagesArr.length;
+        const remaining = 10 - imagesArr.length;
         const toProcess = Array.from(files).slice(0, remaining);
-        if (toProcess.length === 0) { showToast('Maximum 5 images allowed'); return; }
+        if (toProcess.length === 0) { showToast('Maximum 10 images allowed'); return; }
         toProcess.forEach(file => {
             if (!file.type.startsWith('image/')) return;
             // Compress to max 1200x1200 at 75% quality — reduces typical photos from ~2MB to ~80KB
