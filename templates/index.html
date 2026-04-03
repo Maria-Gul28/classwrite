@@ -504,6 +504,22 @@ socket.on('student_joined', (data) => {
     }
 });
 
+// Teacher receives this when a student closes/leaves their assignment tab
+socket.on('student_left', (data) => {
+    const key = `${data.student_name}_${data.assignment_id}`;
+    delete studentWorks[key];
+
+    if (currentRole === 'teacher') {
+        showToast(`🚪 ${data.student_name} left assignment #${data.assignment_id}`);
+        const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
+        if (activeSidebarBtn) {
+            const page = activeSidebarBtn.dataset.page;
+            if (page === 'overview') renderTeacherOverview();
+            else if (page === 'progress') renderLiveProgress();
+        }
+    }
+});
+
 // ============================================================
 //  CONNECTION BANNER HELPERS
 // ============================================================
@@ -1215,6 +1231,34 @@ function escapeHtml(str) {
         return m;
     });
 }
+
+// ============================================================
+//  STUDENT INACTIVE DETECTION — fires when tab is closed/hidden
+// ============================================================
+function emitLeaveAssignment() {
+    if (currentRole === 'student' && currentStudent && currentAssignmentId) {
+        socket.emit('leave_assignment', {
+            student_name: currentStudent,
+            assignment_id: currentAssignmentId
+        });
+    }
+}
+
+// Tab hidden (switching tabs, minimising, or closing)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        emitLeaveAssignment();
+    } else if (document.visibilityState === 'visible' && currentRole === 'student' && currentAssignmentId) {
+        // Tab came back — re-join so the teacher sees them as active again
+        socket.emit('join_assignment', {
+            student_name: currentStudent,
+            assignment_id: currentAssignmentId
+        });
+    }
+});
+
+// Page unload / navigation away (belt-and-suspenders)
+window.addEventListener('pagehide', emitLeaveAssignment);
 
 // ============================================================
 //  EVENT LISTENERS

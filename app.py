@@ -130,6 +130,20 @@ def handle_join(data):
         'timestamp': datetime.now().isoformat()
     }, broadcast=True)
 
+@socketio.on('leave_assignment')
+def handle_leave(data):
+    student_name = data.get('student_name')
+    assignment_id = data.get('assignment_id')
+
+    # Remove their in-progress work so they no longer appear as active
+    database.delete_student_work(student_name, assignment_id)
+
+    emit('student_left', {
+        'student_name': student_name,
+        'assignment_id': assignment_id,
+        'timestamp': datetime.now().isoformat()
+    }, broadcast=True)
+
 if __name__ == '__main__':
     # For local development
     socketio.run(app, debug=True, port=5000)
