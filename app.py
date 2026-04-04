@@ -54,10 +54,23 @@ def assignments():
         )
         return jsonify(new_assignment)
 
-@app.route('/api/assignments/<int:assignment_id>', methods=['DELETE'])
+@app.route('/api/assignments/<int:assignment_id>', methods=['DELETE', 'PUT'])
 def delete_assignment(assignment_id):
-    database.delete_assignment(assignment_id)
-    return jsonify({'success': True})
+    if request.method == 'DELETE':
+        database.delete_assignment(assignment_id)
+        return jsonify({'success': True})
+    elif request.method == 'PUT':
+        data = request.json
+        updated = database.update_assignment(
+            assignment_id,
+            title=data.get('title', 'Untitled'),
+            question=data.get('question', ''),
+            resources=data.get('resources', []),
+            criteria=data.get('criteria', []),
+            mindmap=data.get('mindmap', ''),
+            images=data.get('images', [])
+        )
+        return jsonify(updated)
 
 @app.route('/api/submissions', methods=['GET'])
 def get_submissions():

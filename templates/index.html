@@ -264,6 +264,48 @@
         #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1a1510; color: white; padding: 12px 28px; border-radius: 60px; font-size: 0.85rem; z-index: 20000; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
         #toast.show { opacity: 1; }
 
+        /* Submissions grouped view */
+        .assign-group { background: white; border: 1px solid #e0d4c4; border-radius: 20px; margin-bottom: 20px; overflow: hidden; }
+        .assign-group-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; cursor: pointer; transition: background 0.18s; user-select: none; }
+        .assign-group-header:hover { background: #faf6f0; }
+        .assign-group-title { font-family: 'Lora', serif; font-size: 1.1rem; color: #1a1510; display: flex; align-items: center; gap: 10px; }
+        .assign-group-meta { display: flex; align-items: center; gap: 12px; }
+        .assign-group-chevron { font-size: 0.8rem; color: #8a7a6e; transition: transform 0.2s; }
+        .assign-group.open .assign-group-chevron { transform: rotate(90deg); }
+        .assign-group-body { display: none; border-top: 1px solid #e0d4c4; }
+        .assign-group.open .assign-group-body { display: block; }
+        .sub-student-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid #f0e8dc; cursor: pointer; transition: background 0.15s; }
+        .sub-student-row:last-child { border-bottom: none; }
+        .sub-student-row:hover { background: #fefaf5; }
+        .sub-student-name { font-weight: 600; font-size: 0.95rem; color: #1a1510; display: flex; align-items: center; gap: 8px; }
+        .sub-student-time { font-size: 0.75rem; color: #8a7a6e; }
+
+        /* Full submission overlay */
+        .sub-overlay { position: fixed; inset: 0; background: rgba(26,21,16,0.65); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 15000; padding: 24px; }
+        .sub-overlay.active { display: flex; }
+        .sub-modal { background: white; border-radius: 28px; width: 100%; max-width: 760px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 40px 80px rgba(0,0,0,0.25); animation: modalSlideIn 0.2s ease; }
+        .sub-modal-header { padding: 28px 36px 20px; border-bottom: 1px solid #e0d4c4; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-shrink: 0; }
+        .sub-modal-title { font-family: 'Lora', serif; font-size: 1.4rem; color: #1a1510; }
+        .sub-modal-meta { font-size: 0.8rem; color: #8a7a6e; margin-top: 4px; }
+        .sub-modal-close { background: #faf6f0; border: 1.5px solid #e0d4c4; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.2s; }
+        .sub-modal-close:hover { border-color: #a03030; color: #a03030; }
+        .sub-modal-body { padding: 28px 36px; overflow-y: auto; flex: 1; }
+        .sub-modal-content { font-family: 'Lora', serif; font-size: 1rem; line-height: 1.8; color: #2a201a; white-space: pre-wrap; word-break: break-word; }
+        .sub-modal-wordcount { font-size: 0.75rem; color: #8a7a6e; margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0e8dc; }
+
+        /* Assignment action buttons */
+        .assign-action-row { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+        .btn-outline { background: transparent; border: 1.5px solid #e0d4c4; color: #4a3f35; padding: 7px 14px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.18s; display: inline-flex; align-items: center; gap: 5px; }
+        .btn-outline:hover { border-color: #c47a3a; color: #c47a3a; background: #fdf5ec; }
+        .btn-outline.danger { border-color: #f0c0c0; color: #a03030; }
+        .btn-outline.danger:hover { background: #fdeaea; border-color: #a03030; }
+
+        /* Preview as student banner */
+        .preview-banner { background: #1a1510; color: #faf6f0; padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; font-weight: 600; gap: 16px; }
+        .preview-banner-label { display: flex; align-items: center; gap: 8px; }
+        .preview-banner-close { background: rgba(255,255,255,0.15); border: none; color: white; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; transition: 0.18s; }
+        .preview-banner-close:hover { background: rgba(255,255,255,0.28); }
+
         @media (max-width: 700px) {
             .sidebar { width: 220px; }
             .content { padding: 24px; }
@@ -839,14 +881,22 @@ function renderTeacherAssignments() {
             <div class="page-title">📚 Assignments</div>
             <div class="page-subtitle">${assignments.length} assignment${assignments.length===1?'':'s'} published</div>
             ${assignments.map(a => `
-                <div class="assignment-card">
-                    <div class="assignment-card-title">${escapeHtml(a.title)}</div>
-                    <div style="color:#4a3f35;font-size:0.9rem">${escapeHtml((a.question||'').substring(0,100))}…</div>
-                    <div class="assignment-card-meta">
+                <div class="assignment-card" style="cursor:default">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:0">
+                            <div class="assignment-card-title">${escapeHtml(a.title)}</div>
+                            <div style="color:#4a3f35;font-size:0.9rem;margin-top:4px">${escapeHtml((a.question||'').substring(0,110))}${(a.question||'').length>110?'…':''}</div>
+                        </div>
+                        <div class="assign-action-row">
+                            <button class="btn-outline preview-assign" data-id="${a.id}" title="View as student">👁 Preview</button>
+                            <button class="btn-outline edit-assign" data-id="${a.id}" title="Edit assignment">✏️ Edit</button>
+                            <button class="btn-outline danger delete-assign" data-id="${a.id}" title="Delete">🗑</button>
+                        </div>
+                    </div>
+                    <div class="assignment-card-meta" style="margin-top:14px">
                         <span class="tag">📎 ${a.resources?.length||0} resources</span>
                         <span class="tag">📋 ${a.criteria?.length||0} criteria</span>
                         <span class="tag">📬 ${submissions.filter(s=>s.assignment_id===a.id).length} submitted</span>
-                        <button class="btn btn-ghost delete-assign" data-id="${a.id}" style="margin-left:auto;color:#a03030;border-color:#f0c0c0">🗑 Delete</button>
                     </div>
                 </div>`).join('')}
         </div>
@@ -864,6 +914,195 @@ function renderTeacherAssignments() {
             }
         });
     });
+    document.querySelectorAll('.edit-assign').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            renderEditAssignment(parseInt(btn.dataset.id));
+        });
+    });
+    document.querySelectorAll('.preview-assign').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            previewAssignmentAsStudent(parseInt(btn.dataset.id));
+        });
+    });
+}
+
+
+
+function renderEditAssignment(id) {
+    const a = assignments.find(x => x.id === id);
+    if (!a) return;
+    const content = document.getElementById('mainContent');
+
+    let resourcesArr = [...(a.resources||[])];
+    let criteriaArr  = [...(a.criteria||[])];
+    let imagesArr    = [...(a.images||[])];
+
+    content.innerHTML = `
+        <div class="page active">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+                <button class="btn-outline" id="backToAssigns">← Back</button>
+                <div class="page-title" style="margin-bottom:0">✏️ Edit Assignment</div>
+            </div>
+            <div class="card">
+                <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="editTitle" value="${escapeHtml(a.title)}"></div>
+                <div class="form-group"><label class="form-label">Writing Prompt</label><textarea class="form-textarea" id="editQuestion" rows="4">${escapeHtml(a.question||'')}</textarea></div>
+                <div class="form-group">
+                    <label class="form-label">Resources</label>
+                    <div id="editResList" class="tag-list"></div>
+                    <div style="display:flex;gap:8px"><input class="form-input" id="editResInput" placeholder="Paste a URL or resource name…"><button class="btn btn-ghost" id="editAddResBtn">+ Add</button></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Resource Images</label>
+                    <div class="image-upload-area" id="editImageDropZone">
+                        <div style="font-size:2rem;margin-bottom:8px">🖼️</div>
+                        <div style="font-weight:600;font-size:0.9rem;color:#4a3f35">Drop images here or click to upload</div>
+                        <div style="font-size:0.75rem;color:#8a7a6e;margin-top:4px">PNG, JPG, GIF, WebP</div>
+                        <input type="file" id="editImageFileInput" accept="image/*" multiple style="display:none">
+                    </div>
+                    <div class="image-thumb-grid" id="editImageThumbGrid"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Success Criteria</label>
+                    <div id="editCritList" class="tag-list"></div>
+                    <div style="display:flex;gap:8px"><input class="form-input" id="editCritInput" placeholder="e.g. Clear thesis…"><button class="btn btn-ghost" id="editAddCritBtn">+ Add</button></div>
+                </div>
+                <div class="form-group"><label class="form-label">Mindmap / Notes</label><textarea class="form-textarea" id="editMindmap" rows="3">${escapeHtml(a.mindmap||'')}</textarea></div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <button class="btn btn-primary" id="saveEditBtn">💾 Save Changes</button>
+                    <button class="btn btn-ghost" id="cancelEditBtn">Cancel</button>
+                </div>
+            </div>
+        </div>`;
+
+    const updateResUI  = () => { document.getElementById('editResList').innerHTML  = resourcesArr.map((r,i)=>`<span class="tag">📌 ${escapeHtml(r)} <button class="tag-remove" data-i="${i}" data-t="res">✕</button></span>`).join(''); };
+    const updateCritUI = () => { document.getElementById('editCritList').innerHTML = criteriaArr.map((c,i)=>`<span class="tag">◆ ${escapeHtml(c)} <button class="tag-remove" data-i="${i}" data-t="crit">✕</button></span>`).join(''); };
+    const renderImageThumbs = () => {
+        const grid = document.getElementById('editImageThumbGrid');
+        if (!grid) return;
+        grid.innerHTML = imagesArr.map((src,i)=>`<div class="image-thumb"><img src="${src}" alt="img ${i+1}"><button class="image-thumb-remove" data-i="${i}">✕</button></div>`).join('');
+        grid.querySelectorAll('.image-thumb-remove').forEach(btn => btn.addEventListener('click', ()=>{ imagesArr.splice(+btn.dataset.i,1); renderImageThumbs(); }));
+    };
+
+    updateResUI(); updateCritUI(); renderImageThumbs();
+
+    document.getElementById('editAddResBtn').onclick  = () => { const v=document.getElementById('editResInput').value.trim(); if(v){resourcesArr.push(v);updateResUI();document.getElementById('editResInput').value='';} };
+    document.getElementById('editAddCritBtn').onclick = () => { const v=document.getElementById('editCritInput').value.trim(); if(v){criteriaArr.push(v);updateCritUI();document.getElementById('editCritInput').value='';} };
+
+    document.getElementById('editResList').addEventListener('click', e => {
+        if(e.target.classList.contains('tag-remove')&&e.target.dataset.t==='res'){resourcesArr.splice(+e.target.dataset.i,1);updateResUI();}
+    });
+    document.getElementById('editCritList').addEventListener('click', e => {
+        if(e.target.classList.contains('tag-remove')&&e.target.dataset.t==='crit'){criteriaArr.splice(+e.target.dataset.i,1);updateCritUI();}
+    });
+
+    function compressImage(file,maxW,maxH,q){return new Promise(res=>{const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let{width,height}=img;if(width>maxW||height>maxH){const ratio=Math.min(maxW/width,maxH/height);width=Math.round(width*ratio);height=Math.round(height*ratio);}const c=document.createElement('canvas');c.width=width;c.height=height;c.getContext('2d').drawImage(img,0,0,width,height);res(c.toDataURL('image/jpeg',q));};img.src=e.target.result;};r.readAsDataURL(file);});}
+    function processImages(files){const remaining=10-imagesArr.length;Array.from(files).slice(0,remaining).forEach(f=>{if(!f.type.startsWith('image/'))return;compressImage(f,1200,1200,0.75).then(c=>{imagesArr.push(c);renderImageThumbs();});});}
+    const dropZone=document.getElementById('editImageDropZone'), fileInput=document.getElementById('editImageFileInput');
+    dropZone.addEventListener('click',()=>fileInput.click());
+    fileInput.addEventListener('change',e=>processImages(e.target.files));
+    dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over');});
+    dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');processImages(e.dataTransfer.files);});
+
+    document.getElementById('backToAssigns').onclick = () => navigateToPage('assignments');
+    document.getElementById('cancelEditBtn').onclick  = () => navigateToPage('assignments');
+
+    document.getElementById('saveEditBtn').onclick = async () => {
+        const title    = document.getElementById('editTitle').value.trim();
+        const question = document.getElementById('editQuestion').value.trim();
+        const mindmap  = document.getElementById('editMindmap').value.trim();
+        if (!title || !question) { showToast('Title and prompt are required'); return; }
+
+        const btn = document.getElementById('saveEditBtn');
+        btn.innerHTML = '<span class="spinner"></span> Saving…';
+        btn.disabled = true;
+
+        const result = await apiFetch(`/api/assignments/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ title, question, resources: resourcesArr, criteria: criteriaArr, mindmap, images: imagesArr })
+        });
+
+        if (result) {
+            const idx = assignments.findIndex(x => x.id === id);
+            if (idx !== -1) assignments[idx] = result;
+            showToast('✅ Assignment updated!');
+            navigateToPage('assignments');
+        } else {
+            btn.innerHTML = '💾 Save Changes';
+            btn.disabled = false;
+        }
+    };
+}
+
+function previewAssignmentAsStudent(id) {
+    const a = assignments.find(x => x.id === id);
+    if (!a) return;
+    currentAssignmentId = id;
+
+    // Render the student's assignment view but with a preview banner at top
+    const content = document.getElementById('mainContent');
+    // Borrow openAssignment rendering logic inline
+    const resources = a.resources || [];
+    const criteria = a.criteria || [];
+    const images = a.images || [];
+
+    let slideshowHtml = '';
+    if (images.length > 0) {
+        const slides = images.map((src,i)=>`<div class="slide"><img src="${src}" alt="Resource ${i+1}"></div>`).join('');
+        slideshowHtml = `
+        <div class="slideshow-wrap" id="previewSlideshow">
+            <div class="slideshow-track" id="previewTrack">${slides}</div>
+            ${images.length>1?`<button class="slide-arrow prev disabled" id="previewPrev">◀</button><button class="slide-arrow next" id="previewNext">▶</button><div class="slide-dots">${images.map((_,i)=>`<button class="slide-dot${i===0?' active':''}" data-si="${i}"></button>`).join('')}</div><div class="slide-counter" id="previewCounter">1 / ${images.length}</div>`:''}
+        </div>`;
+    }
+
+    const resourcesHtml = resources.length ? `<div style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px">${resources.map(r=>`<a class="resource-link-item" href="${escapeHtml(r)}" target="_blank" rel="noopener">📌 ${escapeHtml(r)}</a>`).join('')}</div>` : '';
+    const criteriaHtml  = criteria.length  ? `<div style="margin-bottom:20px"><div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:#4a3f35;margin-bottom:8px">Success Criteria</div><div style="display:flex;flex-wrap:wrap;gap:6px">${criteria.map(c=>`<span class="tag">◆ ${escapeHtml(c)}</span>`).join('')}</div></div>` : '';
+    const mindmapHtml   = a.mindmap ? `<div style="background:#fefaf5;border-radius:14px;padding:16px 20px;margin-bottom:20px;font-size:0.88rem;color:#4a3f35;white-space:pre-wrap;line-height:1.65">${escapeHtml(a.mindmap)}</div>` : '';
+
+    content.innerHTML = `
+        <div class="page active">
+            <div class="preview-banner">
+                <div class="preview-banner-label">👁 Previewing as student: <strong>${escapeHtml(a.title)}</strong></div>
+                <button class="preview-banner-close" id="exitPreviewBtn">✕ Exit Preview</button>
+            </div>
+            <div style="padding:32px 0">
+                <div class="page-title" style="margin-bottom:4px">${escapeHtml(a.title)}</div>
+                <div class="page-subtitle" style="margin-bottom:24px">Student view — read only</div>
+                ${slideshowHtml}
+                <div class="card" style="margin-top:20px">
+                    <div style="font-family:'Lora',serif;font-size:1.05rem;line-height:1.75;color:#1a1510;margin-bottom:20px">${escapeHtml(a.question)}</div>
+                    ${resourcesHtml}${criteriaHtml}${mindmapHtml}
+                    <textarea class="writing-area" placeholder="Students would write their response here…" style="margin-top:12px" disabled></textarea>
+                    <div style="margin-top:12px;font-size:0.8rem;color:#8a7a6e;font-style:italic">Submit button would appear here for students</div>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('exitPreviewBtn').addEventListener('click', () => navigateToPage('assignments'));
+
+    // Slideshow logic (if images)
+    if (images.length > 1) {
+        let si = 0;
+        const track = document.getElementById('previewTrack');
+        const prev = document.getElementById('previewPrev');
+        const next = document.getElementById('previewNext');
+        const counter = document.getElementById('previewCounter');
+        const dots = content.querySelectorAll('.slide-dot');
+        const goTo = (n) => {
+            si = Math.max(0, Math.min(n, images.length-1));
+            track.style.transform = `translateX(-${si*100}%)`;
+            dots.forEach((d,i)=>d.classList.toggle('active',i===si));
+            if(counter) counter.textContent=`${si+1} / ${images.length}`;
+            prev.classList.toggle('disabled',si===0);
+            next.classList.toggle('disabled',si===images.length-1);
+        };
+        prev?.addEventListener('click',()=>goTo(si-1));
+        next?.addEventListener('click',()=>goTo(si+1));
+        dots.forEach(d=>d.addEventListener('click',()=>goTo(+d.dataset.si)));
+    }
 }
 
 // Track which student tab is active in live progress
@@ -940,20 +1179,94 @@ function renderSubmissions() {
         content.innerHTML = `<div class="page active"><div class="page-title">✅ Submissions</div><div class="card"><div class="empty-state"><span class="empty-state-icon">📭</span>No submitted work yet</div></div></div>`;
         return;
     }
+
+    // Group submissions by assignment
+    const groups = {};
+    submissions.forEach(s => {
+        const key = s.assignment_id;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+    });
+
+    const groupsHtml = Object.entries(groups).map(([aid, subs]) => {
+        const a = assignments.find(x => x.id === parseInt(aid));
+        const title = a ? a.title : `Assignment #${aid}`;
+        const subsHtml = subs.map(s => {
+            const wc = (s.content||'').trim().split(/\s+/).filter(Boolean).length;
+            const safeData = escapeHtml(JSON.stringify({name:s.student_name,aid:s.assignment_id,at:s.submitted_at,wc}));
+            return `<div class="sub-student-row" data-sub="${safeData}">
+                <div class="sub-student-name">✍️ ${escapeHtml(s.student_name)} <span style="font-size:0.72rem;font-weight:400;color:#8a7a6e">${wc} words</span></div>
+                <div class="sub-student-time">${new Date(s.submitted_at).toLocaleString()}</div>
+            </div>`;
+        }).join('');
+        return `
+            <div class="assign-group">
+                <div class="assign-group-header">
+                    <div class="assign-group-title">📄 ${escapeHtml(title)}</div>
+                    <div class="assign-group-meta">
+                        <span class="badge">${subs.length} submission${subs.length===1?'':'s'}</span>
+                        <span class="assign-group-chevron">▶</span>
+                    </div>
+                </div>
+                <div class="assign-group-body">${subsHtml}</div>
+            </div>`;
+    }).join('');
+
     content.innerHTML = `
         <div class="page active">
             <div class="page-title">✅ Submissions</div>
-            <div class="page-subtitle">${submissions.length} submission${submissions.length===1?'':'s'}</div>
-            ${[...submissions].reverse().map(s => {
-                const assignTitle = assignments.find(a=>a.id===s.assignment_id)?.title || `Assignment #${s.assignment_id}`;
-                return `
-                    <div class="work-item">
-                        <strong>${escapeHtml(s.student_name)}</strong> — <em>${escapeHtml(assignTitle)}</em>
-                        <div style="white-space:pre-wrap;font-family:'Lora',serif;font-size:0.88rem;margin-top:10px;line-height:1.65">${escapeHtml((s.content||'').substring(0,300))}${s.content?.length>300?'…':''}</div>
-                        <div class="autosave-indicator" style="margin-top:8px">Submitted: ${new Date(s.submitted_at).toLocaleString()}</div>
-                    </div>`;
-            }).join('')}
+            <div class="page-subtitle">${submissions.length} submission${submissions.length===1?'':'s'} across ${Object.keys(groups).length} assignment${Object.keys(groups).length===1?'':'s'} — click an assignment to expand, then a name to read their work</div>
+            ${groupsHtml}
+        </div>
+        <div class="sub-overlay" id="subOverlay">
+            <div class="sub-modal">
+                <div class="sub-modal-header">
+                    <div>
+                        <div class="sub-modal-title" id="subModalTitle"></div>
+                        <div class="sub-modal-meta" id="subModalMeta"></div>
+                    </div>
+                    <button class="sub-modal-close" id="subModalClose">✕</button>
+                </div>
+                <div class="sub-modal-body">
+                    <div class="sub-modal-content" id="subModalContent"></div>
+                    <div class="sub-modal-wordcount" id="subModalWordcount"></div>
+                </div>
+            </div>
         </div>`;
+
+    // Toggle group open/close
+    content.querySelectorAll('.assign-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+            header.closest('.assign-group').classList.toggle('open');
+        });
+    });
+
+    // Open first group by default
+    content.querySelector('.assign-group')?.classList.add('open');
+
+    // Student row → open submission overlay
+    content.querySelectorAll('.sub-student-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const meta = JSON.parse(row.dataset.sub);
+            const sub = submissions.find(s => s.student_name === meta.name && s.assignment_id === meta.aid);
+            if (!sub) return;
+            const assign = assignments.find(a => a.id === meta.aid);
+            const wc = meta.wc;
+            const cc = (sub.content||'').length;
+            document.getElementById('subModalTitle').textContent = sub.student_name;
+            document.getElementById('subModalMeta').textContent = (assign ? assign.title : 'Assignment') + ' · Submitted ' + new Date(sub.submitted_at).toLocaleString();
+            document.getElementById('subModalContent').textContent = sub.content || '(No content)';
+            document.getElementById('subModalWordcount').textContent = `${wc} word${wc===1?'':'s'} · ${cc} character${cc===1?'':'s'}`;
+            document.getElementById('subOverlay').classList.add('active');
+        });
+    });
+
+    document.getElementById('subModalClose').addEventListener('click', () => {
+        document.getElementById('subOverlay').classList.remove('active');
+    });
+    document.getElementById('subOverlay').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('subOverlay')) document.getElementById('subOverlay').classList.remove('active');
+    });
 }
 
 // ============================================================

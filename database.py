@@ -141,6 +141,22 @@ def get_assignments():
         
         return assignments_list
 
+def update_assignment(assignment_id, title, question, resources, criteria, mindmap, images):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE assignments
+            SET title = %s, question = %s, resources = %s, criteria = %s, mindmap = %s, images = %s
+            WHERE id = %s
+        ''', (title, question,
+              psycopg2.extras.Json(resources),
+              psycopg2.extras.Json(criteria),
+              mindmap,
+              psycopg2.extras.Json(images),
+              assignment_id))
+        cursor.close()
+    return get_assignment(assignment_id)
+
 def delete_assignment(assignment_id):
     with get_db() as conn:
         cursor = conn.cursor()
