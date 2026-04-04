@@ -929,7 +929,6 @@ function renderTeacherAssignments() {
 }
 
 
-
 function renderEditAssignment(id) {
     const a = assignments.find(x => x.id === id);
     if (!a) return;
@@ -1193,8 +1192,8 @@ function renderSubmissions() {
         const title = a ? a.title : `Assignment #${aid}`;
         const subsHtml = subs.map(s => {
             const wc = (s.content||'').trim().split(/\s+/).filter(Boolean).length;
-            const safeData = escapeHtml(JSON.stringify({name:s.student_name,aid:s.assignment_id,at:s.submitted_at,wc}));
-            return `<div class="sub-student-row" data-sub="${safeData}">
+            const globalIdx = submissions.indexOf(s);
+            return `<div class="sub-student-row" data-sidx="${globalIdx}">
                 <div class="sub-student-name">✍️ ${escapeHtml(s.student_name)} <span style="font-size:0.72rem;font-weight:400;color:#8a7a6e">${wc} words</span></div>
                 <div class="sub-student-time">${new Date(s.submitted_at).toLocaleString()}</div>
             </div>`;
@@ -1247,11 +1246,10 @@ function renderSubmissions() {
     // Student row → open submission overlay
     content.querySelectorAll('.sub-student-row').forEach(row => {
         row.addEventListener('click', () => {
-            const meta = JSON.parse(row.dataset.sub);
-            const sub = submissions.find(s => s.student_name === meta.name && s.assignment_id === meta.aid);
+            const sub = submissions[parseInt(row.dataset.sidx)];
             if (!sub) return;
-            const assign = assignments.find(a => a.id === meta.aid);
-            const wc = meta.wc;
+            const assign = assignments.find(a => a.id === sub.assignment_id);
+            const wc = (sub.content||'').trim().split(/\s+/).filter(Boolean).length;
             const cc = (sub.content||'').length;
             document.getElementById('subModalTitle').textContent = sub.student_name;
             document.getElementById('subModalMeta').textContent = (assign ? assign.title : 'Assignment') + ' · Submitted ' + new Date(sub.submitted_at).toLocaleString();
