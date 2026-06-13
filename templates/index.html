@@ -170,9 +170,7 @@
             font-family: 'Lora', serif; font-size: 0.9rem; color: #4a3f35;
             line-height: 1.75; background: #fefaf5; padding: 16px 20px;
             border-radius: 12px; white-space: pre-wrap; word-break: break-word;
-            transition: background-color 0.4s ease;
         }
-        .progress-preview.flash { background-color: #f5ecd9; }
         .progress-chars { font-size: 0.75rem; color: #8a7a6e; margin-top: 8px; }
 
         /* Image upload area */
@@ -535,9 +533,18 @@ function updateLiveProgressContent(data) {
 
     const previewEl = document.getElementById('progressPreviewText');
     if (previewEl) {
-        previewEl.textContent = fullContent;
-        previewEl.classList.add('flash');
-        setTimeout(() => previewEl.classList.remove('flash'), 400);
+        const prevContent = previewEl.textContent;
+        if (fullContent.startsWith(prevContent)) {
+            // Common case: text was appended/typed at the end — just add the diff
+            const added = fullContent.slice(prevContent.length);
+            if (added) previewEl.appendChild(document.createTextNode(added));
+        } else if (prevContent.startsWith(fullContent)) {
+            // Text was deleted from the end — trim via textContent (rare/short op)
+            previewEl.textContent = fullContent;
+        } else {
+            // Edit happened mid-text (paste, delete in middle, etc.) — full replace needed
+            previewEl.textContent = fullContent;
+        }
     }
 
     const timeEl = document.querySelector('#activeStudentCard .progress-time');
