@@ -170,7 +170,9 @@
             font-family: 'Lora', serif; font-size: 0.9rem; color: #4a3f35;
             line-height: 1.75; background: #fefaf5; padding: 16px 20px;
             border-radius: 12px; white-space: pre-wrap; word-break: break-word;
+            transition: background-color 0.4s ease;
         }
+        .progress-preview.flash { background-color: #f5ecd9; }
         .progress-chars { font-size: 0.75rem; color: #8a7a6e; margin-top: 8px; }
 
         /* Image upload area */
@@ -495,8 +497,9 @@ socket.on('connect_error', () => {
 // Teacher receives these from server when a student updates progress
 socket.on('progress_update', (data) => {
     const key = `${data.student_name}_${data.assignment_id}`;
+    const isNewWriter = !studentWorks[key];
     studentWorks[key] = data;
-    
+
     // Update UI if teacher is on relevant page
     if (currentRole === 'teacher') {
         const activeSidebarBtn = document.querySelector('.sidebar-btn.active');
@@ -505,13 +508,50 @@ socket.on('progress_update', (data) => {
             if (page === 'overview') {
                 renderTeacherOverview();
             } else if (page === 'progress') {
-                renderLiveProgress();
+                // Smooth path: if this is the currently-viewed student and not a
+                // brand-new writer (so the tab bar doesn't need to change),
+                // patch the text in place instead of rebuilding the whole page.
+                const previewEl = document.getElementById('progressPreviewText');
+                if (!isNewWriter && key === activeProgressTab && previewEl) {
+                    updateLiveProgressContent(data);
+                } else {
+                    renderLiveProgress();
+                }
             } else if (page === 'submissions') {
                 renderSubmissions();
             }
         }
     }
 });
+
+// Lightweight in-place update for the live progress view, used when the
+// content of the currently-active student's tab changes — avoids a full
+// innerHTML rebuild so the textarea/preview doesn't flicker or jump.
+function updateLiveProgressContent(data) {
+    const fullContent = data.content || '';
+    const charCount = fullContent.length;
+    const wordCount = fullContent.trim().split(/\s+/).filter(Boolean).length;
+    const updated = data.last_updated ? new Date(data.last_updated).toLocaleTimeString() : '';
+
+    const previewEl = document.getElementById('progressPreviewText');
+    if (previewEl) {
+        previewEl.textContent = fullContent;
+        previewEl.classList.add('flash');
+        setTimeout(() => previewEl.classList.remove('flash'), 400);
+    }
+
+    const timeEl = document.querySelector('#activeStudentCard .progress-time');
+    if (timeEl) timeEl.textContent = `Last update: ${updated}`;
+
+    const charsEl = document.querySelector('#activeStudentCard .progress-chars');
+    if (charsEl) charsEl.textContent = `${wordCount} word${wordCount === 1 ? '' : 's'} · ${charCount} characters`;
+
+    // Update the matching tab's word count without rebuilding the tab bar
+    const key = `${data.student_name}_${data.assignment_id}`;
+    const safeKey = key.replace(/(["\\])/g, '\\$1');
+    const tabWordsEl = document.querySelector(`.student-tab[data-key="${safeKey}"] .tab-words`);
+    if (tabWordsEl) tabWordsEl.textContent = `${wordCount}w`;
+}
 
 // Teacher receives this when a student submits
 socket.on('submission_update', (data) => {
