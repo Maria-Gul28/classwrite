@@ -1,28 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📚 ClassWrite · Doodly Classroom</title>
-  <!-- Fonts for doodly vibe -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=Gochi+Hand&display=swap" rel="stylesheet" />
-  <!-- Font Awesome for cute icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-  <!-- Main styles -->
-  <link rel="stylesheet" href="/static/css/style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClassWrite | Collaborative Writing Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
-  <div id="app" class="app-container"></div>
 
-  <!-- Socket.IO -->
-  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
-  <!-- Modular JS -->
-  <script src="/static/js/api.js"></script>
-  <script src="/static/js/socket-handlers.js"></script>
-  <script src="/static/js/student-views.js"></script>
-  <script src="/static/js/teacher-views.js"></script>
-  <script src="/static/js/app.js"></script>
+<!-- CONNECTION BANNER -->
+<div id="connectionBanner">⚡ Connecting to server...</div>
+
+<!-- ENTRY SCREEN -->
+<div id="entryScreen">
+    <!-- Corner decorations using your assets -->
+    <img src="/static/assets/books2.png" class="entry-deco entry-deco-tl" alt="">
+    <img src="/static/assets/books1.png" class="entry-deco entry-deco-br" alt="">
+    <img src="/static/assets/ABC.png"    class="entry-deco entry-deco-tr" alt="">
+
+    <div class="entry-card">
+        <!-- Books icon above logo -->
+        <img src="/static/assets/books2.png" class="entry-card-deco" alt="">
+
+        <div class="entry-logo">Class<span class="logo-blue">Write</span></div>
+        <div class="entry-tagline">Collaborative Writing Studio</div>
+        <div class="entry-question">Who are you joining as?</div>
+
+        <div class="entry-choices">
+            <button class="choice-btn teacher-btn" id="teacherChoiceBtn">
+                <span class="choice-icon">
+                    <img src="/static/assets/teacher.png" alt="Teacher">
+                </span>
+                <span class="choice-label">Teacher</span>
+                <span class="choice-sub">Create &amp; monitor</span>
+            </button>
+            <button class="choice-btn student-btn" id="studentChoiceBtn">
+                <span class="choice-icon">
+                    <img src="/static/assets/student.png" alt="Student">
+                </span>
+                <span class="choice-label">Student</span>
+                <span class="choice-sub">Write &amp; submit</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- TEACHER MODAL -->
+<div class="modal-overlay" id="teacherModal">
+    <div class="modal-box">
+        <div class="modal-title">Teacher Access</div>
+        <div class="modal-sub">Sign in to your classroom</div>
+        <div class="modal-error" id="teacherError">Invalid email or password</div>
+        <div class="field-group">
+            <label class="field-label">Email</label>
+            <input class="field-input" type="email" id="teacherEmail" placeholder="maria_gul28@yahoo.com">
+        </div>
+        <div class="field-group">
+            <label class="field-label">Password</label>
+            <input class="field-input" type="password" id="teacherPassword" placeholder="Password">
+        </div>
+        <button class="modal-btn" id="confirmTeacherBtn">Sign In →</button>
+        <button class="modal-btn secondary" id="closeTeacherModal">← Back</button>
+    </div>
+</div>
+
+<!-- STUDENT MODAL -->
+<div class="modal-overlay" id="studentModal">
+    <div class="modal-box">
+        <div class="modal-title">Student Entry</div>
+        <div class="modal-sub">Enter your name and a 4-digit PIN</div>
+        <div class="modal-error" id="studentError"></div>
+        <div class="field-group">
+            <label class="field-label">Full Name</label>
+            <input class="field-input" id="studentName" placeholder="e.g., Sara Khan">
+        </div>
+        <div class="field-group">
+            <label class="field-label">4-Digit PIN</label>
+            <input class="field-input" id="studentPin" maxlength="4" placeholder="1234" pattern="[0-9]{4}">
+        </div>
+        <button class="modal-btn" id="confirmStudentBtn">Enter Classroom →</button>
+        <button class="modal-btn secondary" id="closeStudentModal">← Back</button>
+    </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="appShell">
+    <div class="top-bar">
+        <div class="top-bar-logo">
+            <img src="/static/assets/ABC.png" class="top-bar-logo-img" alt="">
+            Class<span class="logo-blue">Write</span>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;">
+            <div class="user-badge" id="userBadge">👤 Guest</div>
+            <button class="sign-out-btn" id="signOutBtn">Sign out</button>
+        </div>
+    </div>
+    <div class="main-layout">
+        <nav class="sidebar" id="sidebarNav"></nav>
+        <main class="content" id="mainContent"></main>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Scripts — order matters: api and socket before views, app last -->
+<script src="/static/js/api.js"></script>
+<script src="/static/js/socket-handlers.js"></script>
+<script src="/static/js/teacher-views.js"></script>
+<script src="/static/js/student-views.js"></script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>
