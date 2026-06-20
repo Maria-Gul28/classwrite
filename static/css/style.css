@@ -1090,3 +1090,38 @@ body {
     0%, 100% { transform: translateY(0); }
     50%       { transform: translateY(-6px); }
 }
+
+
+/* ============================================================
+   SVG ICON UTILITIES
+   ============================================================ */
+
+/* Sidebar button icons */
+.sidebar-btn-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    vertical-align: middle;
+    margin-right: 6px;
+    display: inline-block;
+}
+
+/* Page title / card title inline icons */
+.title-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    vertical-align: middle;
+    margin-right: 8px;
+    display: inline-block;
+}
+
+/* User badge icon */
+.user-badge-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    vertical-align: middle;
+    margin-right: 5px;
+    display: inline-block;
+}

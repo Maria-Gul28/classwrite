@@ -25,7 +25,7 @@ function renderTeacherOverview() {
                 </div>
             </div>
             <div class="card">
-                <div class="card-title">📬 Recent Submissions</div>
+                <div class="card-title"><img src='/static/assets/submissions.svg' class='title-icon' alt=''> Recent Submissions</div>
                 <div id="recentSubmissionsList">
                     ${recentSubs.length === 0
                         ? '<div class="empty-state"><span class="empty-state-icon">📭</span>No submissions yet</div>'
@@ -45,7 +45,7 @@ function renderCreateAssignment() {
     const content = document.getElementById('mainContent');
     content.innerHTML = `
         <div class="page active">
-            <div class="page-title">✨ New Assignment</div>
+            <div class="page-title"><img src='/static/assets/goose_with_books.svg' class='title-icon' alt=''> New Assignment</div>
             <div class="card">
                 <div class="card-title">Details</div>
                 <div class="form-group">
@@ -200,7 +200,7 @@ function renderTeacherAssignments() {
     }
     content.innerHTML = `
         <div class="page active">
-            <div class="page-title">📚 Assignments</div>
+            <div class="page-title"><img src='/static/assets/goose_with_books.svg' class='title-icon' alt=''> Assignments</div>
             <div class="page-subtitle">${assignments.length} assignment${assignments.length===1?'':'s'} published</div>
             ${assignments.map(a => `
                 <div class="assignment-card" style="cursor:default">
@@ -264,7 +264,7 @@ function renderEditAssignment(id) {
         <div class="page active">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
                 <button class="btn-outline" id="backToAssigns">← Back</button>
-                <div class="page-title" style="margin-bottom:0">✏️ Edit Assignment</div>
+                <div class="page-title" style="margin-bottom:0"><img src='/static/assets/goose_with_books.svg' class='title-icon' alt=''> Edit Assignment</div>
             </div>
             <div class="card">
                 <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="editTitle" value="${escapeHtml(a.title)}"></div>
@@ -493,7 +493,7 @@ function renderLiveProgress() {
 function renderSubmissions() {
     const content = document.getElementById('mainContent');
     if (submissions.length === 0) {
-        content.innerHTML = `<div class="page active"><div class="page-title">✅ Submissions</div><div class="card"><div class="empty-state"><span class="empty-state-icon">📭</span>No submitted work yet</div></div></div>`;
+        content.innerHTML = `<div class="page active"><div class="page-title"><img src='/static/assets/submissions.svg' class='title-icon' alt=''> Submissions</div><div class="card"><div class="empty-state"><span class="empty-state-icon">📭</span>No submitted work yet</div></div></div>`;
         return;
     }
 
@@ -530,7 +530,7 @@ function renderSubmissions() {
 
     content.innerHTML = `
         <div class="page active">
-            <div class="page-title">✅ Submissions</div>
+            <div class="page-title"><img src='/static/assets/submissions.svg' class='title-icon' alt=''> Submissions</div>
             <div class="page-subtitle">${submissions.length} submission${submissions.length===1?'':'s'} across ${Object.keys(groups).length} assignment${Object.keys(groups).length===1?'':'s'} — click an assignment to expand, then a name to read their work</div>
             ${groupsHtml}
         </div>

@@ -74,13 +74,13 @@ function renderApp(restorePage = null) {
         sidebar.innerHTML = `
             <div>
                 <div class="sidebar-section-label">Dashboard</div>
-                <button class="sidebar-btn" data-page="overview">🏠 Overview</button>
-                <button class="sidebar-btn" data-page="create">✏️ New Assignment</button>
-                <button class="sidebar-btn" data-page="assignments">📚 Assignments</button>
-                <button class="sidebar-btn" data-page="progress"><span class="live-dot"></span>Live Progress</button>
-                <button class="sidebar-btn" data-page="submissions">✅ Submissions</button>
+                <button class="sidebar-btn" data-page="overview"><img src="/static/assets/bird_studying.svg" class="sidebar-btn-icon" alt=""> Overview</button>
+                <button class="sidebar-btn" data-page="create"><img src="/static/assets/goose_with_books.svg" class="sidebar-btn-icon" alt=""> New Assignment</button>
+                <button class="sidebar-btn" data-page="assignments"><img src="/static/assets/goose_with_books.svg" class="sidebar-btn-icon" alt=""> Assignments</button>
+                <button class="sidebar-btn" data-page="progress"><span class="live-dot"></span><img src="/static/assets/live_progress.svg" class="sidebar-btn-icon" alt=""> Live Progress</button>
+                <button class="sidebar-btn" data-page="submissions"><img src="/static/assets/submissions.svg" class="sidebar-btn-icon" alt=""> Submissions</button>
             </div>
-            <img src="/static/assets/books1.png" class="sidebar-deco" alt="">
+            <img src="/static/assets/goose_reading.svg" class="sidebar-deco" alt="">
         `;
         if (restorePage?.page) {
             navigateToPage(restorePage.page);
@@ -93,10 +93,10 @@ function renderApp(restorePage = null) {
         sidebar.innerHTML = `
             <div>
                 <div class="sidebar-section-label">Classroom</div>
-                <button class="sidebar-btn" data-page="studentAssignments">📚 Assignments</button>
-                <button class="sidebar-btn" data-page="myWork">📝 My Work</button>
+                <button class="sidebar-btn" data-page="studentAssignments"><img src="/static/assets/goose_with_books.svg" class="sidebar-btn-icon" alt=""> Assignments</button>
+                <button class="sidebar-btn" data-page="myWork"><img src="/static/assets/goose_reading.svg" class="sidebar-btn-icon" alt=""> My Work</button>
             </div>
-            <img src="/static/assets/books2.png" class="sidebar-deco" alt="">
+            <img src="/static/assets/bird_studying.svg" class="sidebar-deco" alt="">
         `;
         if (restorePage?.page) {
             navigateToPage(restorePage.page);
@@ -166,9 +166,9 @@ async function enterAs(role, isRestore = false) {
     document.getElementById('appShell').style.display    = 'block';
 
     if (role === 'teacher') {
-        document.getElementById('userBadge').innerHTML = '👩‍🏫 Teacher · Maria';
+        document.getElementById('userBadge').innerHTML = '<img src="/static/assets/teacher.svg" class="user-badge-icon" alt=""> Teacher · Maria';
     } else {
-        document.getElementById('userBadge').innerHTML = `✍️ ${escapeHtml(currentStudent)}`;
+        document.getElementById('userBadge').innerHTML = `<img src="/static/assets/student.svg" class="user-badge-icon" alt=""> ${escapeHtml(currentStudent)}`;
     }
 
     if (!isRestore) saveSession();

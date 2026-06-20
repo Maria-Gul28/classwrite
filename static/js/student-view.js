@@ -19,7 +19,7 @@ function renderStudentAssignments() {
     }
     content.innerHTML = `
         <div class="page active">
-            <div class="page-title">📖 Assignments</div>
+            <div class="page-title"><img src='/static/assets/goose_with_books.svg' class='title-icon' alt=''> Assignments</div>
             ${assignments.map(a => {
                 const submitted = submissions.some(s => s.student_name === currentStudent && s.assignment_id === a.id);
                 return `
@@ -193,7 +193,7 @@ function renderMyWork() {
     if (mySubs.length === 0) {
         content.innerHTML = `
             <div class="page active">
-                <div class="page-title">📋 My Work</div>
+                <div class="page-title"><img src='/static/assets/goose_reading.svg' class='title-icon' alt=''> My Work</div>
                 <div class="card">
                     <div class="empty-state">
                         <span class="empty-state-icon">📭</span>
@@ -206,7 +206,7 @@ function renderMyWork() {
 
     content.innerHTML = `
         <div class="page active">
-            <div class="page-title">📋 My Work</div>
+            <div class="page-title"><img src='/static/assets/goose_reading.svg' class='title-icon' alt=''> My Work</div>
             ${mySubs.map(s => {
                 const assignTitle = assignments.find(a => a.id === s.assignment_id)?.title || `Assignment #${s.assignment_id}`;
                 return `
